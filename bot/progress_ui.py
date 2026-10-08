@@ -2,6 +2,7 @@ import time
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, Tuple
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, MessageNotModified, RPCError
 
 logger = logging.getLogger(__name__)
