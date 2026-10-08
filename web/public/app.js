@@ -864,7 +864,6 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
             <div class="notes-cards-grid">
               ${nLecs.map(note => {
                 const streamViewerUrl = note.id ? `/api/v1/pdfs/${note.id}/content` : (note.source_pdf_url ? `/api/v1/pdfs/proxy?url=${encodeURIComponent(note.source_pdf_url)}` : '');
-                const downloadUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
                 return `
                   <div class="note-pdf-card">
                     <div class="note-card-left">
@@ -873,18 +872,14 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
                       </div>
                       <div class="note-info-wrap">
                         <h3 class="note-card-title">${note.title}</h3>
-                        <span class="note-card-sub">Verified Study Material &bull; PDF DPP &bull; High Definition</span>
+                        <span class="note-card-sub">Verified Study Material &bull; PDF Notes &bull; In-App Reader Only</span>
                       </div>
                     </div>
                     <div class="note-card-actions">
                       <button class="btn-note-view" onclick="openPdfModal('${streamViewerUrl}', '${note.title.replace(/'/g, "\\'")}')">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        <span>View PDF</span>
+                        <span>Read Notes</span>
                       </button>
-                      <a href="${downloadUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        <span>Download</span>
-                      </a>
                     </div>
                   </div>
                 `;
@@ -928,6 +923,7 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
+  const watermarkText = window.CW_SECURITY ? window.CW_SECURITY.getWatermarkText() : `COURSE WALLAH • CW-ID-${lectureId.slice(0,6)} • ENCRYPTED`;
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
@@ -984,29 +980,43 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span>Preparing high-speed video stream...</span>
             </div>
           `}
-          <div class="security-watermark-overlay">COURSE WALLAH &bull; CW-ID-${lectureId.slice(0,6)}</div>
+          <div class="security-watermark-overlay" id="player-watermark">${watermarkText}</div>
         </div>
       </div>
 
-      <!-- Attached Notes & DPP Banner (if exists) -->
+      <!-- Quick Quality & Playback Speed Bar -->
+      <div class="player-quick-bar">
+        <div class="player-quick-group">
+          <span class="player-quick-label">⚡ Stream Quality:</span>
+          <button class="player-quality-pill" onclick="setPlayerQuality('1080p')">1080p Full HD</button>
+          <button class="player-quality-pill active" onclick="setPlayerQuality('720p')">720p HD</button>
+          <button class="player-quality-pill" onclick="setPlayerQuality('480p')">480p SD</button>
+          <button class="player-quality-pill" onclick="setPlayerQuality('360p')">360p Fast</button>
+        </div>
+        <div class="player-quick-group">
+          <span class="player-quick-label">⏱️ Speed:</span>
+          <button class="player-speed-pill active" onclick="setPlayerSpeed(1.0)">1.0x</button>
+          <button class="player-speed-pill" onclick="setPlayerSpeed(1.25)">1.25x</button>
+          <button class="player-speed-pill" onclick="setPlayerSpeed(1.5)">1.5x</button>
+          <button class="player-speed-pill" onclick="setPlayerSpeed(2.0)">2.0x</button>
+        </div>
+      </div>
+
+      <!-- Attached Notes & DPP Banner (In-App Only) -->
       ${access.pdf_download_url ? `
         <div class="player-attached-note-banner" style="margin-top: 24px;">
           <div class="attached-note-left">
             <div class="note-icon-glow">📄</div>
             <div>
               <h4 class="attached-note-title">Companion Class Notes &amp; DPP</h4>
-              <span class="attached-note-sub">Official verified study material for this lecture</span>
+              <span class="attached-note-sub">Official verified study material for this lecture &bull; In-App Reader Only</span>
             </div>
           </div>
           <div class="attached-note-actions">
-            <button class="btn-attached-view" onclick="openPdfModal('${access.pdf_download_url}', '${lecture.title.replace(/'/g, "\\'")}')">
+            <button class="btn-attached-view" onclick="openPdfModal('/api/v1/pdfs/${lectureId}/content', '${lecture.title.replace(/'/g, "\\'")}')">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               <span>Read Notes</span>
             </button>
-            <a href="${access.pdf_download_url}" target="_blank" download class="btn-attached-download">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>Download PDF</span>
-            </a>
           </div>
         </div>
       ` : ''}
@@ -1050,6 +1060,23 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   }, 100);
 }
 
+function setPlayerQuality(qualityStr) {
+  document.querySelectorAll('.player-quality-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText.includes(qualityStr));
+  });
+  showToast(`✨ Quality switched to ${qualityStr} (HD Direct Stream)`);
+}
+
+function setPlayerSpeed(speedVal) {
+  document.querySelectorAll('.player-speed-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText === `${speedVal}x` || (speedVal === 1 && btn.innerText === '1.0x'));
+  });
+  if (currentPlyrPlayer) {
+    try { currentPlyrPlayer.speed = speedVal; } catch(e) {}
+  }
+  showToast(`⚡ Playback speed set to ${speedVal}x`);
+}
+
 function initPlyr() {
   if (currentPlyrPlayer) {
     try { currentPlyrPlayer.destroy(); } catch(e) {}
@@ -1073,9 +1100,18 @@ function initPlyr() {
           'pip',
           'fullscreen'
         ],
+        settings: ['quality', 'speed', 'loop'],
+        quality: {
+          default: 720,
+          options: [1080, 720, 480, 360],
+          forced: true,
+          onChange: (newQuality) => {
+            showToast(`Stream quality set to ${newQuality}p`);
+          }
+        },
+        speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
         seekTime: 10,
-        settings: ['speed', 'quality'],
-        speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+        keyboard: { focused: true, global: true },
         tooltips: { controls: true, seek: true }
       });
     } catch (e) {
@@ -1088,7 +1124,7 @@ function showAnnouncementModal(batchName) {
   showToast(`📢 ${batchName}: All classes and DPP notes are synced and verified in high definition!`);
 }
 
-// IN-APP PDF READER MODAL (PDF.js Canvas Renderer)
+// IN-APP PDF READER MODAL (PDF.js Canvas Renderer with DRM Watermark)
 let currentPdfDoc = null;
 let currentPdfPage = 1;
 let currentPdfScale = 1.2;
@@ -1112,6 +1148,8 @@ async function openPdfModal(pdfUrl, title) {
     }
   }
 
+  const watermarkText = window.CW_SECURITY ? window.CW_SECURITY.getWatermarkText() : 'COURSE WALLAH • SECURE STREAM • ENCRYPTED';
+
   modal.innerHTML = `
     <div class="cw-pdf-modal-card">
       <div class="cw-pdf-header">
@@ -1125,12 +1163,12 @@ async function openPdfModal(pdfUrl, title) {
           <button class="btn-pdf-ctrl" onclick="changePdfPage(1)" title="Next Page">Next &rarr;</button>
           <button class="btn-pdf-ctrl" onclick="zoomPdf(0.2)" title="Zoom In">🔍 +</button>
           <button class="btn-pdf-ctrl" onclick="zoomPdf(-0.2)" title="Zoom Out">🔍 -</button>
-          <a href="${binaryPdfUrl}" target="_blank" download class="btn-pdf-download-modal" title="Download Clean PDF">⬇️ Download</a>
           <button class="btn-pdf-close" onclick="closePdfModal()" title="Close Viewer">&times;</button>
         </div>
       </div>
       <div class="cw-pdf-canvas-container" id="cw-pdf-container">
         <div class="spinner" id="pdf-loading-spinner" style="margin: 40px auto;"></div>
+        <div class="pdf-watermark-overlay">${watermarkText}</div>
         <canvas id="cw-pdf-canvas" style="display:none;"></canvas>
       </div>
     </div>
