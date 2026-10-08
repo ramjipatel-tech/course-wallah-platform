@@ -1173,9 +1173,15 @@ async function openPdfModal(pdfUrl, title) {
   }
 }
 
+let currentRenderTask = null;
+
 async function renderPdfPage(num) {
   if (!currentPdfDoc) return;
   try {
+    if (currentRenderTask) {
+      try { currentRenderTask.cancel(); } catch(e) {}
+      currentRenderTask = null;
+    }
     const page = await currentPdfDoc.getPage(num);
     const canvas = document.getElementById('cw-pdf-canvas');
     if (!canvas) return;
@@ -1189,12 +1195,16 @@ async function renderPdfPage(num) {
       canvasContext: ctx,
       viewport: viewport
     };
-    await page.render(renderContext).promise;
+    currentRenderTask = page.render(renderContext);
+    await currentRenderTask.promise;
+    currentRenderTask = null;
 
     const pageNumEl = document.getElementById('pdf-current-page');
     if (pageNumEl) pageNumEl.innerText = num;
   } catch (ex) {
-    console.debug('Page render error:', ex);
+    if (ex?.name !== 'RenderingCancelledException') {
+      console.debug('Page render error:', ex);
+    }
   }
 }
 
