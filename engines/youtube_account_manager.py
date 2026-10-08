@@ -1064,3 +1064,78 @@ class YouTubeAccountManager:
             await session.flush()
             return True, f"Account '{acc.name}' is now {new_status}.", new_status
 
+    @classmethod
+    def save_checkpoint(
+        cls,
+        batch_id: str,
+        lecture_index: int,
+        prepared_video_path: str,
+        thumbnail_path: Optional[str] = None,
+        duration: float = 0.0,
+        resolution: str = "1080p",
+        file_size: int = 0,
+        reason: str = "uploadLimitExceeded"
+    ) -> Path:
+        """
+        Saves watermarked artifact and metadata checkpoint for seamless resumption.
+        """
+        import shutil
+        ckpt_dir = Path(DOWNLOADS_DIR) / "checkpoints" / str(batch_id) / f"lec_{lecture_index:04d}"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+        target_video = ckpt_dir / "wm_video.mp4"
+        if os.path.exists(prepared_video_path) and str(Path(prepared_video_path).resolve()) != str(target_video.resolve()):
+            shutil.copy2(prepared_video_path, target_video)
+
+        target_thumb = None
+        if thumbnail_path and os.path.exists(thumbnail_path):
+            target_thumb = str(ckpt_dir / "thumb.jpg")
+            if str(Path(thumbnail_path).resolve()) != str(Path(target_thumb).resolve()):
+                shutil.copy2(thumbnail_path, target_thumb)
+
+        data = {
+            "batch_id": str(batch_id),
+            "lecture_index": lecture_index,
+            "prepared_video_path": str(target_video),
+            "thumbnail_path": target_thumb,
+            "duration": duration,
+            "resolution": resolution,
+            "file_size": file_size or (target_video.stat().st_size if target_video.exists() else 0),
+            "reason": reason,
+            "stage": "WATERMARKED_READY_FOR_UPLOAD",
+            "created_at": datetime.utcnow().isoformat()
+        }
+        ckpt_file = ckpt_dir / "checkpoint.json"
+        ckpt_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return ckpt_file
+
+    @classmethod
+    def load_checkpoint(cls, batch_id: str, lecture_index: int) -> Optional[Dict[str, Any]]:
+        """
+        Loads checkpoint metadata if valid prepared artifact exists.
+        """
+        ckpt_dir = Path(DOWNLOADS_DIR) / "checkpoints" / str(batch_id) / f"lec_{lecture_index:04d}"
+        ckpt_file = ckpt_dir / "checkpoint.json"
+        if not ckpt_file.exists():
+            return None
+        try:
+            data = json.loads(ckpt_file.read_text("utf-8"))
+            wm_p = data.get("prepared_video_path")
+            if wm_p and os.path.exists(wm_p) and os.path.getsize(wm_p) > 0:
+                return data
+        except Exception:
+            pass
+        return None
+
+    @classmethod
+    def clear_checkpoint(cls, batch_id: str, lecture_index: int) -> bool:
+        """
+        Removes checkpoint after successful upload.
+        """
+        import shutil
+        ckpt_dir = Path(DOWNLOADS_DIR) / "checkpoints" / str(batch_id) / f"lec_{lecture_index:04d}"
+        if ckpt_dir.exists():
+            shutil.rmtree(ckpt_dir, ignore_errors=True)
+            return True
+        return False
+

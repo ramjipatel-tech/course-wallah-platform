@@ -110,9 +110,7 @@ class TestCourseWallahResilience(unittest.IsolatedAsyncioTestCase):
              patch("engines.job_engine.VideoProcessor.probe_video", new_callable=AsyncMock, return_value={"duration": 180.0, "resolution": "720p", "size": 4096}), \
              patch("engines.job_engine.VideoProcessor.split_if_large", new_callable=AsyncMock, return_value=[str(dummy_video)]), \
              patch("engines.job_engine.WatermarkEngine.apply_watermark", side_effect=mock_watermark), \
-             patch("engines.job_engine.VideoProcessor.extract_thumbnail", new_callable=AsyncMock, return_value=None), \
-             patch("engines.job_engine.YouTubeUploader.upload_video", mock_yt), \
-             patch("engines.job_engine.YouTubeUploader.check_video_status", new_callable=AsyncMock, return_value={"is_ready": True, "upload_status": "uploaded"}), \
+             patch("engines.job_engine.YouTubeAccountManager.upload_with_multi_account_failover", mock_yt), \
              patch("engines.job_engine.download_pdf_file", return_value=(True, None)), \
              patch("engines.job_engine.validate_and_process_pdf", side_effect=mock_validate_pdf), \
              patch("engines.job_engine.B2StorageManager.upload_pdf", mock_b2):
@@ -203,9 +201,7 @@ class TestCourseWallahResilience(unittest.IsolatedAsyncioTestCase):
              patch("engines.job_engine.VideoProcessor.probe_video", new_callable=AsyncMock, return_value={"duration": 120.0, "resolution": "720p", "size": 4096}), \
              patch("engines.job_engine.VideoProcessor.split_if_large", new_callable=AsyncMock, return_value=[str(dummy_video)]), \
              patch("engines.job_engine.WatermarkEngine.apply_watermark", side_effect=mock_watermark_b), \
-             patch("engines.job_engine.VideoProcessor.extract_thumbnail", new_callable=AsyncMock, return_value=None), \
-             patch("engines.job_engine.YouTubeUploader.upload_video", mock_yt), \
-             patch("engines.job_engine.YouTubeUploader.check_video_status", new_callable=AsyncMock, return_value={"is_ready": True, "upload_status": "uploaded"}), \
+             patch("engines.job_engine.YouTubeAccountManager.upload_with_multi_account_failover", mock_yt), \
              patch("engines.job_engine.download_pdf_file", mock_pdf_dl):
 
             res = await engine_inst.process_lecture_item(
@@ -405,7 +401,7 @@ class TestCourseWallahResilience(unittest.IsolatedAsyncioTestCase):
              patch("engines.job_engine.VideoProcessor.split_if_large", new_callable=AsyncMock, return_value=[str(dummy_video)]), \
              patch("engines.job_engine.WatermarkEngine.apply_watermark", side_effect=mock_watermark), \
              patch("engines.job_engine.VideoProcessor.extract_thumbnail", new_callable=AsyncMock, return_value=None), \
-             patch("engines.job_engine.YouTubeUploader.upload_video", side_effect=mock_upload_with_limit):
+             patch("engines.job_engine.YouTubeAccountManager.upload_with_multi_account_failover", side_effect=mock_upload_with_limit):
 
             with self.assertRaises(YouTubeUploadLimitExceededError):
                 await engine_inst.process_lecture_item(
@@ -439,8 +435,7 @@ class TestCourseWallahResilience(unittest.IsolatedAsyncioTestCase):
 
         with patch("engines.job_engine.MediaDownloader.download_video_stream_with_meta", mock_download), \
              patch("engines.job_engine.WatermarkEngine.apply_watermark", mock_watermark), \
-             patch("engines.job_engine.YouTubeUploader.upload_video", mock_yt_success), \
-             patch("engines.job_engine.YouTubeUploader.check_video_status", new_callable=AsyncMock, return_value={"is_ready": True, "upload_status": "uploaded"}):
+             patch("engines.job_engine.YouTubeAccountManager.upload_with_multi_account_failover", mock_yt_success):
 
             res = await engine_inst.process_lecture_item(
                 app_id=app.id,

@@ -535,25 +535,42 @@ class ContentProcessingEngine:
                 def _yt_progress_cb(pct, up, tot):
                     asyncio.create_task(_update_telegram_ui("Uploading to YouTube...", yt_pct=pct))
 
-                yt_res = await YouTubeAccountManager.upload_with_multi_account_failover(
-                    file_path=watermarked_video_path,
-                    title=f"{item.title} | {subject_name}",
-                    description=f"Course Wallah Platform: {item.title}\nSubject: {subject_name}\nUnit: {folder_name}",
-                    privacy="unlisted",
-                    thumbnail_path=thumb_path,
-                    batch_id=str(batch_id),
-                    lecture_id=lecture.id if 'lecture' in locals() else None,
-                    lecture_index=item.index,
-                    duration=video_duration,
-                    resolution=video_resolution,
-                    progress_callback=_yt_progress_cb
-                )
+                try:
+                    yt_res = await YouTubeAccountManager.upload_with_multi_account_failover(
+                        file_path=watermarked_video_path,
+                        title=f"{item.title} | {subject_name}",
+                        description=f"Course Wallah Platform: {item.title}\nSubject: {subject_name}\nUnit: {folder_name}",
+                        privacy="unlisted",
+                        thumbnail_path=thumb_path,
+                        batch_id=str(batch_id),
+                        lecture_id=lecture.id if 'lecture' in locals() else None,
+                        lecture_index=item.index,
+                        duration=video_duration,
+                        resolution=video_resolution,
+                        progress_callback=_yt_progress_cb
+                    )
+                except YouTubeUploadLimitExceededError as limit_exc:
+                    logger.warning(f"[CHECKPOINT_SAVED] lecture_index=#{item.index} Saving prepared artifact before pausing.")
+                    YouTubeAccountManager.save_checkpoint(
+                        batch_id=str(batch_id),
+                        lecture_index=item.index,
+                        prepared_video_path=watermarked_video_path,
+                        thumbnail_path=thumb_path,
+                        duration=video_duration,
+                        resolution=video_resolution,
+                        file_size=video_size,
+                        reason="uploadLimitExceeded"
+                    )
+                    raise limit_exc
 
                 youtube_video_id = yt_res.get("youtube_video_id")
                 youtube_channel_id = yt_res.get("youtube_channel_id")
                 youtube_account_id = yt_res.get("youtube_account_id")
                 youtube_url = yt_res.get("youtube_url")
                 upload_completed_at = datetime.utcnow()
+
+                # Clean up checkpoint since upload succeeded
+                YouTubeAccountManager.clear_checkpoint(str(batch_id), item.index)
 
                 phase_states["youtube"] = "✅"
                 await _update_telegram_ui("YouTube Uploaded", yt_pct=100.0)

@@ -11,16 +11,444 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, urlunparse
 from typing import Optional, Dict, Any, Tuple, Union, List
 
+from dataclasses import dataclass
+import requests
+
 # Platform root directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-# Import original root modules with graceful fallbacks for standalone cloud/container deployment
-try:
-    import itsgolu as original_helper
-except ImportError:
-    original_helper = None
+# ==============================================================================
+# DATA STRUCTURES
+# ==============================================================================
+
+@dataclass
+class AppxLectureResult:
+    video_url: Optional[str] = None
+    pdf_url: Optional[str] = None
+    title: Optional[str] = None
+    thumbnail: Optional[str] = None
+    video_id: Optional[str] = None
+    course_id: Optional[str] = None
+    video_quality: Optional[str] = None
+    is_drm: bool = False
+    drm_message: Optional[str] = None
+    has_video: bool = False
+    has_pdf: bool = False
+    error: Optional[str] = None
+    raw_data: Optional[Dict[str, Any]] = None
+
+
+# ==============================================================================
+# NATIVE STANDALONE MEDIA ENGINE (ZERO EXTERNAL LEGACY DEPENDENCIES)
+# ==============================================================================
+
+class NativeMediaHelper:
+    """
+    Self-contained media resolution and download engine for Course Wallah Platform.
+    Eliminates external legacy dependencies and provides 100% autonomous operation
+    across Railway, Docker, Linux, and Windows environments.
+    """
+
+    DEFAULT_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Connection": "keep-alive"
+    }
+
+    @classmethod
+    def resolve_lecture_source(cls, url: str, target_quality: Optional[str] = None) -> AppxLectureResult:
+        """
+        Resolves AppX, ClassX, Akamai, or Heroku signed lecture endpoints (such as fetch_video)
+        into structured media stream URLs, companion PDFs, and DRM metadata.
+        """
+        if not url or not isinstance(url, str):
+            return AppxLectureResult(error="Empty or invalid URL provided")
+
+        clean_url = url.strip()
+        parsed = urlparse(clean_url)
+        path_lower = parsed.path.lower()
+        url_lower = clean_url.lower()
+
+        # Direct media streams or external links that do not require API resolution
+        if (
+            path_lower.endswith((".m3u8", ".mp4", ".mkv", ".ts", ".webm"))
+            or "youtu.be" in url_lower
+            or "youtube.com" in url_lower
+        ):
+            return AppxLectureResult(
+                video_url=clean_url,
+                has_video=True,
+                is_drm=False,
+                video_quality=target_quality or "720p"
+            )
+
+        if path_lower.endswith(".pdf"):
+            return AppxLectureResult(
+                pdf_url=clean_url,
+                has_pdf=True,
+                is_drm=False
+            )
+
+        # Make HTTP request to resolve the lecture endpoint
+        try:
+            resp = requests.get(clean_url, headers=cls.DEFAULT_HEADERS, timeout=25)
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except Exception:
+                # If not JSON, check if text is an M3U8 or redirect
+                text = resp.text.strip()
+                if text.startswith("#EXTM3U") or ".m3u8" in text:
+                    return AppxLectureResult(
+                        video_url=resp.url or clean_url,
+                        has_video=True,
+                        is_drm=False,
+                        video_quality=target_quality or "720p"
+                    )
+                return AppxLectureResult(error="Unrecognized non-JSON API response from provider")
+        except Exception as e:
+            logger.error(f"[NATIVE_HELPER] Failed to query lecture endpoint: {e}")
+            return AppxLectureResult(error=f"Network error resolving lecture source: {e}")
+
+        # Extract data dictionary (handles both { "data": { ... } } and top-level response)
+        d = data.get("data") if isinstance(data, dict) and isinstance(data.get("data"), dict) else (data if isinstance(data, dict) else {})
+
+        # 1. DRM Check
+        is_drm = False
+        drm_msg = None
+        if (
+            d.get("is_drm") in (True, 1, "1", "true", "True")
+            or d.get("drm") in (True, 1, "1", "true", "True")
+            or bool(d.get("drm_type"))
+            or bool(d.get("drm_scheme"))
+            or "widevine" in str(d).lower()
+        ):
+            is_drm = True
+            drm_msg = str(d.get("drm_message") or d.get("drm_type") or "Widevine DRM Encrypted")
+
+        # 2. Extract Video Stream URL
+        video_url = None
+        qualities = d.get("qualities") or d.get("streams") or d.get("video_urls") or d.get("encrypted_links")
+        if isinstance(qualities, list) and qualities:
+            target_num = re.search(r"\d+", str(target_quality)) if target_quality else None
+            matched_q = None
+            if target_num:
+                target_val = target_num.group(0)
+                for q_item in qualities:
+                    if isinstance(q_item, dict):
+                        q_label = str(q_item.get("quality") or q_item.get("label") or q_item.get("resolution") or "")
+                        if target_val in q_label:
+                            matched_q = q_item.get("link") or q_item.get("url") or q_item.get("video_url")
+                            break
+            if not matched_q:
+                first_item = qualities[-1] if isinstance(qualities[-1], dict) else qualities[0]
+                if isinstance(first_item, dict):
+                    matched_q = first_item.get("link") or first_item.get("url") or first_item.get("video_url")
+            if matched_q:
+                video_url = str(matched_q).strip()
+
+        if not video_url:
+            for key in ("link", "video_url", "stream_url", "m3u8_url", "m3u8", "video", "encrypted_link", "encrypted_url", "url"):
+                val = d.get(key)
+                if val and isinstance(val, str) and val.strip():
+                    val_str = val.strip()
+                    if not val_str.lower().endswith(".pdf"):
+                        video_url = val_str
+                        break
+
+        if not video_url:
+            file_val = d.get("file_url") or d.get("download_url")
+            if file_val and isinstance(file_val, str) and not file_val.lower().endswith(".pdf"):
+                video_url = file_val.strip()
+
+        # 3. Extract PDF URL
+        pdf_url = None
+        for key in ("document_url", "pdf_url", "pdf", "notes", "notes_url", "doc_url", "material_url", "attachment_url", "notes_pdf"):
+            val = d.get(key)
+            if val and isinstance(val, str) and val.strip():
+                pdf_url = val.strip()
+                break
+
+        if not pdf_url:
+            file_val = d.get("file_url")
+            if file_val and isinstance(file_val, str) and file_val.lower().endswith(".pdf"):
+                pdf_url = file_val.strip()
+
+        # 4. Metadata
+        title = d.get("title") or d.get("video_name") or d.get("name") or d.get("lecture_title") or ""
+        thumbnail = d.get("thumbnail") or d.get("thumb") or d.get("image") or d.get("poster") or ""
+        
+        qs = parse_qs(parsed.query)
+        video_id = str(d.get("video_id") or d.get("id") or qs.get("video_id", [""])[0] or "")
+        course_id = str(d.get("course_id") or d.get("batch_id") or qs.get("course_id", [""])[0] or "")
+
+        return AppxLectureResult(
+            video_url=video_url,
+            pdf_url=pdf_url,
+            title=title or None,
+            thumbnail=thumbnail or None,
+            video_id=video_id or None,
+            course_id=course_id or None,
+            video_quality=target_quality or "720p",
+            is_drm=is_drm,
+            drm_message=drm_msg,
+            has_video=bool(video_url),
+            has_pdf=bool(pdf_url),
+            raw_data=data
+        )
+
+    @classmethod
+    def download_appx_m3u8(
+        cls,
+        url: str,
+        clean_title: str,
+        headers: Optional[Dict[str, str]] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads HLS (.m3u8) streams via yt-dlp or ffmpeg into clean, validated MP4 containers.
+        """
+        dest_dir = Path(custom_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out_file = dest_dir / f"{clean_title}.mp4"
+
+        # If key is provided in stream URL (e.g. url*key), delegate to Spayee decryptor
+        if "*" in url:
+            stream_part, key_part = url.split("*", 1)
+            return original_spayee.download_spayee_hls(
+                url=stream_part.strip(),
+                output_path=None,
+                clean_title=clean_title,
+                key=key_part.strip(),
+                quality="720p",
+                custom_dir=custom_dir
+            )
+
+        # 1. Attempt download using yt-dlp
+        try:
+            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via yt-dlp: {clean_title}")
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-check-certificates",
+                "--concurrent-fragments", "8",
+                "-N", "8",
+                "--retries", "10",
+                "--fragment-retries", "10",
+                "-o", str(out_file),
+                url
+            ]
+            if headers:
+                for k, v in headers.items():
+                    cmd.extend(["--add-header", f"{k}:{v}"])
+
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            if res.returncode == 0 and out_file.exists() and out_file.stat().st_size > 1024:
+                return str(out_file)
+            else:
+                logger.warning(f"[NATIVE_HELPER] yt-dlp exited with {res.returncode}: {res.stderr[:200]}")
+        except Exception as yt_err:
+            logger.warning(f"[NATIVE_HELPER] yt-dlp failed: {yt_err}, falling back to ffmpeg...")
+
+        # 2. Fallback to ffmpeg
+        try:
+            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via ffmpeg: {clean_title}")
+            ffmpeg_cmd = ["ffmpeg", "-y"]
+            hdr_str = ""
+            req_headers = cls.DEFAULT_HEADERS.copy()
+            if headers:
+                req_headers.update(headers)
+            for k, v in req_headers.items():
+                hdr_str += f"{k}: {v}\r\n"
+            if hdr_str:
+                ffmpeg_cmd.extend(["-headers", hdr_str])
+
+            ffmpeg_cmd.extend([
+                "-i", url,
+                "-c", "copy",
+                "-bsf:a", "aac_adtstoasc",
+                "-movflags", "+faststart",
+                str(out_file)
+            ])
+            res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=1800)
+            if res.returncode == 0 and out_file.exists() and out_file.stat().st_size > 1024:
+                return str(out_file)
+            else:
+                raise RuntimeError(f"ffmpeg failed with exit {res.returncode}: {res.stderr[:200]}")
+        except Exception as ff_err:
+            raise RuntimeError(f"HLS download failed across all engines: {ff_err}")
+
+    @classmethod
+    def download_direct_video(
+        cls,
+        url: str,
+        clean_title: str,
+        headers: Optional[Dict[str, str]] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads direct media streams (.mp4, .mkv, .ts) in streamed chunks.
+        """
+        dest_dir = Path(custom_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        
+        ext = ".mp4"
+        path_p = Path(urlparse(url).path)
+        if path_p.suffix.lower() in [".mp4", ".mkv", ".webm", ".ts", ".mov"]:
+            ext = path_p.suffix.lower()
+            
+        out_file = dest_dir / f"{clean_title}{ext}"
+        req_headers = cls.DEFAULT_HEADERS.copy()
+        if headers:
+            req_headers.update(headers)
+
+        try:
+            with requests.get(url, headers=req_headers, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(out_file, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            if out_file.exists() and out_file.stat().st_size > 0:
+                return str(out_file)
+        except Exception as e:
+            logger.warning(f"[NATIVE_HELPER] Direct chunk download failed: {e}, attempting yt-dlp...")
+
+        return cls.download_appx_m3u8(url, clean_title, headers=headers, custom_dir=custom_dir)
+
+    @classmethod
+    async def download_pdf(
+        cls,
+        url: str,
+        name: str,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads PDF documents asynchronously.
+        """
+        dest_dir = Path(custom_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        clean_name = re.sub(r'[\\/*?:"<>|]', "", name).strip() or "document"
+        if not clean_name.lower().endswith(".pdf"):
+            clean_name += ".pdf"
+        out_file = dest_dir / clean_name
+
+        def _do_download():
+            with requests.get(url, headers=cls.DEFAULT_HEADERS, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(out_file, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=512 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            return str(out_file)
+
+        return await asyncio.to_thread(_do_download)
+
+    @classmethod
+    def download_image(
+        cls,
+        url: str,
+        clean_title: str,
+        headers: Optional[Dict[str, str]] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads image assets.
+        """
+        dest_dir = Path(custom_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out_file = dest_dir / f"{clean_title}.jpg"
+        req_headers = cls.DEFAULT_HEADERS.copy()
+        if headers:
+            req_headers.update(headers)
+
+        resp = requests.get(url, headers=req_headers, timeout=30)
+        resp.raise_for_status()
+        out_file.write_bytes(resp.content)
+        return str(out_file)
+
+    @classmethod
+    async def download_video(
+        cls,
+        url: str,
+        clean_title: str,
+        quality: str = "720p",
+        user_id: Optional[int] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads YouTube or generic video sources via yt-dlp.
+        """
+        dest_dir = Path(custom_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out_file = dest_dir / f"{clean_title}.mp4"
+
+        def _ytdlp_sync():
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-check-certificates",
+                "-f", f"bestvideo[height<={quality.rstrip('p')}]+bestaudio/best[height<={quality.rstrip('p')}]/best",
+                "--merge-output-format", "mp4",
+                "-o", str(out_file),
+                url
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            if res.returncode == 0 and out_file.exists() and out_file.stat().st_size > 1024:
+                return str(out_file)
+            raise RuntimeError(f"yt-dlp failed with code {res.returncode}: {res.stderr[:200]}")
+
+        return await asyncio.to_thread(_ytdlp_sync)
+
+    @classmethod
+    def download_and_decrypt_video(
+        cls,
+        clean_stream: str,
+        clean_title: str,
+        key: Optional[str] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads and decrypts AES-128 streams.
+        """
+        return original_spayee.download_spayee_hls(
+            url=clean_stream,
+            output_path=None,
+            clean_title=clean_title,
+            key=key,
+            quality="720p",
+            custom_dir=custom_dir
+        )
+
+    @classmethod
+    def download_kgs(
+        cls,
+        url: str,
+        clean_title: str,
+        quality: str = "720p",
+        headers: Optional[Dict[str, str]] = None,
+        custom_dir: str = "downloads"
+    ) -> str:
+        """
+        Downloads Khan Global Studies (KGS) Akamai streams.
+        """
+        kgs_headers = {
+            "User-Agent": cls.DEFAULT_HEADERS["User-Agent"],
+            "Referer": "https://khanglobalstudies.com/",
+            "Origin": "https://khanglobalstudies.com"
+        }
+        if headers:
+            kgs_headers.update(headers)
+        return cls.download_appx_m3u8(url, clean_title, headers=kgs_headers, custom_dir=custom_dir)
+
+
+# ==============================================================================
+# IMPORT ORIGINAL ROOT MODULES OR FALLBACK TO NATIVE HELPER
+# ==============================================================================
 
 try:
     import spayee_downloader as original_spayee
@@ -28,9 +456,14 @@ except ImportError:
     from providers import spayee as original_spayee
 
 try:
+    import itsgolu as original_helper
+except ImportError:
+    original_helper = NativeMediaHelper
+
+try:
     import kgs_downloader as original_kgs
 except ImportError:
-    original_kgs = None
+    original_kgs = NativeMediaHelper
 
 try:
     import youtube_fallback as original_yt_fallback
@@ -46,7 +479,7 @@ try:
     from utils import parse_pdf_input
 except ImportError:
     def parse_pdf_input(url: str, title: str = ""):
-        return {"url": url, "title": title}
+        return {"url": url, "title": title, "password": None}
 
 from providers.router import MediaRouter, MediaType
 
