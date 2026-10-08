@@ -95,26 +95,32 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Lecture not available or unpublished")
 
     video = lecture.video
-    if not video or not video.youtube_video_id:
+    has_video = bool(video and video.youtube_video_id) or bool(lecture.source_url)
+    if not has_video:
         return {
             "has_video": False,
             "has_pdf": lecture.has_pdf,
             "message": "This lecture contains study material only."
         }
 
+    stream_url = None
+    if lecture.source_url and any(lecture.source_url.lower().endswith(ext) or ext in lecture.source_url.lower() for ext in (".m3u8", ".mp4", "transcoded-videos", "liveclasses", "stream")):
+        stream_url = lecture.source_url
+
     pdf_url = lecture.source_pdf_url or (f"/api/v1/pdfs/{lecture.id}/content" if lecture.pdf else None)
     return {
         "has_video": True,
         "has_pdf": lecture.has_pdf,
         "title": lecture.title,
-        "duration": video.duration,
-        "youtube_video_id": video.youtube_video_id,
+        "duration": video.duration if video else 0,
+        "youtube_video_id": video.youtube_video_id if video else None,
+        "stream_url": stream_url,
         "pdf_download_url": pdf_url,
         "player_config": {
             "autoplay": False,
             "controls": True,
             "branding": "Course Wallah",
-            "quality": video.resolution or "1080p"
+            "quality": (video.resolution if video else None) or "1080p"
         }
     }
 

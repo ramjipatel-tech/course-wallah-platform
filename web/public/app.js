@@ -958,14 +958,54 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
           <span class="subtag-pill">VIDEO LECTURE</span>
           <span class="subtag-dot">•</span>
           <span class="subtag-playing">NOW PLAYING</span>
+  const isDirectHls = Boolean(access.stream_url);
+  const hasYouTube = Boolean(access.youtube_video_id);
+
+  container.innerHTML = `
+    <!-- Top Back Navigation -->
+    <div class="batch-detail-header-row" style="margin-bottom: 20px;">
+      <button class="btn-sub-back" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Back</span>
+      </button>
+    </div>
+
+    <!-- Main AS Multiverse Player Card -->
+    <div class="as-player-card">
+      
+      <!-- Top App Header Row -->
+      <div class="as-player-header-row">
+        <div class="as-player-app-left">
+          <img src="/static/logo.png" alt="App Logo" class="as-player-app-avatar" onerror="this.src='/static/logo.png'">
+          <div class="as-player-app-meta">
+            <h2 class="as-player-app-name">${lecture.batch_name || 'Course Wallah'}</h2>
+            <span class="as-player-app-secure">● SECURE CLIENT SESSION ACTIVE</span>
+          </div>
         </div>
-        <h1 class="as-player-title">${lecture.title}</h1>
+        <button class="btn-show-announcement" onclick="showAnnouncementModal('${escapeHtml(lecture.batch_name || 'Batch Updates')}')">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>Show Announcement</span>
+        </button>
       </div>
 
-      <!-- Sleek Tablet / TV Display Bezel Frame (Screenshot Match) -->
+      <!-- Video Meta Details -->
+      <div class="as-player-meta-wrap">
+        <div class="as-player-subtag">
+          <span class="subtag-pill">VIDEO LECTURE</span>
+          <span class="subtag-dot">•</span>
+          <span class="subtag-playing">NOW PLAYING</span>
+        </div>
+        <h1 class="as-player-title">${escapeHtml(lecture.title)}</h1>
+      </div>
+
+      <!-- Sleek Tablet Frame (Exact AS Multiverse Match) -->
       <div class="as-video-tablet-frame">
         <div class="as-video-inner-wrap" id="player-container">
-          ${access.youtube_video_id ? `
+          ${isDirectHls ? `
+            <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
+              <source src="${access.stream_url}" type="application/x-mpegURL" />
+            </video>
+          ` : (hasYouTube ? `
             <div class="plyr__video-embed" id="cw-plyr-element">
               <iframe
                 src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?origin=${encodeURIComponent(window.location.origin)}&iv_load_policy=3&modestbranding=1&playsinline=1&showinfo=0&rel=0&enablejsapi=1&controls=0&disablekb=1&fs=0&widget_referrer=${encodeURIComponent(window.location.origin)}"
@@ -977,29 +1017,30 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
           ` : `
             <div class="video-placeholder-box">
               <div class="spinner"></div>
-              <span>Preparing high-speed video stream...</span>
+              <span>Preparing video stream...</span>
             </div>
-          `}
+          `)}
 
-          <!-- Full-Width Continuous Sleek Header Bar across top of video (100% Covers YouTube Title, Channel, and Share buttons) -->
-          <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
-            <div class="player-top-brand">
-              <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">
-              <span class="player-top-pill">COURSE WALLAH</span>
-              <span class="player-top-sep">|</span>
-              <span class="player-top-title">${escapeHtml(lecture.title)}</span>
+          <!-- Seamless Top Overlay Bar (For YouTube embed to mask branding) -->
+          ${hasYouTube && !isDirectHls ? `
+            <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
+              <div class="player-top-brand">
+                <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">
+                <span class="player-top-pill">COURSE WALLAH</span>
+                <span class="player-top-sep">|</span>
+                <span class="player-top-title">${escapeHtml(lecture.title)}</span>
+              </div>
+              <div class="player-top-badge">
+                <span class="player-live-dot"></span>
+                <span class="player-hd-text">ULTRA HD 1080p</span>
+              </div>
             </div>
-            <div class="player-top-badge">
-              <span class="player-live-dot"></span>
-              <span class="player-hd-text">ULTRA HD 1080p</span>
-            </div>
-          </div>
 
-          <!-- Solid Bottom-Right Precision Cover (100% Covers YouTube Logo) -->
-          <div class="player-mask-yt-cover" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
-            <img src="/static/logo.png" alt="Course Wallah" class="yt-cover-logo">
-            <span class="yt-cover-text">COURSE WALLAH</span>
-          </div>
+            <div class="player-mask-yt-cover" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
+              <img src="/static/logo.png" alt="Course Wallah" class="yt-cover-logo">
+              <span class="yt-cover-text">COURSE WALLAH</span>
+            </div>
+          ` : ''}
         </div>
       </div>
 
@@ -1019,6 +1060,22 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
           <button class="player-speed-pill" onclick="setPlayerSpeed(1.5)">1.5x</button>
           <button class="player-speed-pill" onclick="setPlayerSpeed(2.0)">2.0x</button>
         </div>
+      </div>
+
+      <!-- AS Multiverse Social Promo Banner Card (Exact Screenshot Match) -->
+      <div class="as-promo-banner-card">
+        <div class="as-promo-left">
+          <div class="as-promo-icon-circle">🌐</div>
+          <div class="as-promo-text-wrap">
+            <div class="as-promo-title-row">
+              <span class="as-promo-name">Course Wallah Platform</span>
+              <span class="as-promo-domain">COURSEWALLAH.APP</span>
+              <span class="as-promo-tag">CENTRAL HUB</span>
+            </div>
+            <p class="as-promo-desc">Explore the verified educational cloud matrix hosting all secure digital portals, subject batches, notes, and study material.</p>
+          </div>
+        </div>
+        <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-as-promo-action">Visit Platform &rarr;</a>
       </div>
 
       <!-- Attached Notes & DPP Banner (In-App Only) -->
@@ -1075,9 +1132,11 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Initialize Plyr instance
   setTimeout(() => {
-    initPlyr();
+    initPlyr(access.stream_url);
   }, 100);
 }
+
+let currentHlsInstance = null;
 
 function togglePlayerPlayback() {
   if (currentPlyrPlayer) {
@@ -1091,14 +1150,22 @@ function setPlayerQuality(qualityStr) {
   document.querySelectorAll('.player-quality-pill').forEach(btn => {
     btn.classList.toggle('active', btn.innerText.includes(qualityStr));
   });
-  const ytQualityMap = {
-    '1080p': 'hd1080',
-    '720p': 'hd720',
-    '480p': 'large',
-    '360p': 'medium'
-  };
-  const targetYt = ytQualityMap[qualityStr] || 'hd1080';
-  if (currentPlyrPlayer && currentPlyrPlayer.embed) {
+  
+  if (currentHlsInstance) {
+    const qNum = parseInt(qualityStr.replace('p', ''), 10);
+    currentHlsInstance.levels.forEach((level, levelIndex) => {
+      if (level.height === qNum) {
+        currentHlsInstance.currentLevel = levelIndex;
+      }
+    });
+  } else if (currentPlyrPlayer && currentPlyrPlayer.embed) {
+    const ytQualityMap = {
+      '1080p': 'hd1080',
+      '720p': 'hd720',
+      '480p': 'large',
+      '360p': 'medium'
+    };
+    const targetYt = ytQualityMap[qualityStr] || 'hd1080';
     try {
       if (typeof currentPlyrPlayer.embed.setPlaybackQuality === 'function') {
         currentPlyrPlayer.embed.setPlaybackQuality(targetYt);
@@ -1121,72 +1188,118 @@ function setPlayerSpeed(speedVal) {
   showToast(`⚡ Playback speed set to ${speedVal}x`);
 }
 
-function initPlyr() {
+function initPlyr(streamUrl) {
   if (currentPlyrPlayer) {
     try { currentPlyrPlayer.destroy(); } catch(e) {}
     currentPlyrPlayer = null;
   }
+  if (currentHlsInstance) {
+    try { currentHlsInstance.destroy(); } catch(e) {}
+    currentHlsInstance = null;
+  }
+
   const el = document.getElementById('cw-plyr-element');
-  if (el && typeof Plyr !== 'undefined') {
-    try {
+  if (!el || typeof Plyr === 'undefined') return;
+
+  const plyrControls = [
+    'play-large',
+    'play',
+    'rewind',
+    'fast-forward',
+    'progress',
+    'current-time',
+    'duration',
+    'mute',
+    'volume',
+    'settings',
+    'pip',
+    'fullscreen'
+  ];
+
+  // If HTML5 video with direct HLS stream
+  if (el.tagName === 'VIDEO' && streamUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90
+    });
+    hls.loadSource(streamUrl);
+    hls.attachMedia(el);
+    currentHlsInstance = hls;
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      const availableQualities = hls.levels.map(l => l.height);
       currentPlyrPlayer = new Plyr(el, {
-        controls: [
-          'play-large',
-          'play',
-          'rewind',
-          'fast-forward',
-          'progress',
-          'current-time',
-          'duration',
-          'mute',
-          'volume',
-          'settings',
-          'pip',
-          'fullscreen'
-        ],
+        controls: plyrControls,
         settings: ['quality', 'speed', 'loop'],
         quality: {
-          default: 1080,
-          options: [1080, 720, 480, 360],
+          default: availableQualities[availableQualities.length - 1] || 720,
+          options: availableQualities,
           forced: true,
           onChange: (newQuality) => {
-            showToast(`Stream quality set to ${newQuality}p`);
+            hls.levels.forEach((level, levelIndex) => {
+              if (level.height === newQuality) {
+                hls.currentLevel = levelIndex;
+              }
+            });
+            showToast(`Quality set to ${newQuality}p`);
           }
         },
         speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
         seekTime: 10,
         keyboard: { focused: true, global: true },
-        tooltips: { controls: true, seek: true },
-        youtube: {
-          noCookie: true,
-          rel: 0,
-          showinfo: 0,
-          iv_load_policy: 3,
-          modestbranding: 1,
-          controls: 0,
-          disablekb: 1,
-          customControls: true
-        }
+        tooltips: { controls: true, seek: true }
       });
+    });
+    return;
+  }
 
-      const enforceHD = () => {
-        if (currentPlyrPlayer && currentPlyrPlayer.embed) {
-          try {
-            if (typeof currentPlyrPlayer.embed.setPlaybackQuality === 'function') {
-              currentPlyrPlayer.embed.setPlaybackQuality('hd1080');
-            }
-            if (typeof currentPlyrPlayer.embed.setPlaybackQualityRange === 'function') {
-              currentPlyrPlayer.embed.setPlaybackQualityRange('hd1080', 'hd1080');
-            }
-          } catch(e) {}
+  // Standard Plyr fallback
+  try {
+    currentPlyrPlayer = new Plyr(el, {
+      controls: plyrControls,
+      settings: ['quality', 'speed', 'loop'],
+      quality: {
+        default: 1080,
+        options: [1080, 720, 480, 360],
+        forced: true,
+        onChange: (newQuality) => {
+          showToast(`Stream quality set to ${newQuality}p`);
         }
-      };
+      },
+      speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
+      seekTime: 10,
+      keyboard: { focused: true, global: true },
+      tooltips: { controls: true, seek: true },
+      youtube: {
+        noCookie: true,
+        rel: 0,
+        showinfo: 0,
+        iv_load_policy: 3,
+        modestbranding: 1,
+        controls: 0,
+        disablekb: 1,
+        customControls: true
+      }
+    });
 
-      currentPlyrPlayer.on('ready', enforceHD);
-      currentPlyrPlayer.on('playing', enforceHD);
-    } catch (e) {
-      console.debug('Plyr initialization fallback:', e);
-    }
+    const enforceHD = () => {
+      if (currentPlyrPlayer && currentPlyrPlayer.embed) {
+        try {
+          if (typeof currentPlyrPlayer.embed.setPlaybackQuality === 'function') {
+            currentPlyrPlayer.embed.setPlaybackQuality('hd1080');
+          }
+          if (typeof currentPlyrPlayer.embed.setPlaybackQualityRange === 'function') {
+            currentPlyrPlayer.embed.setPlaybackQualityRange('hd1080', 'hd1080');
+          }
+        } catch(e) {}
+      }
+    };
+
+    currentPlyrPlayer.on('ready', enforceHD);
+    currentPlyrPlayer.on('playing', enforceHD);
+  } catch (e) {
+    console.debug('Plyr initialization fallback:', e);
   }
 }
 
