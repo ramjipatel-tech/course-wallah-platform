@@ -992,8 +992,9 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
             <span class="player-mask-hd-tag">ULTRA HD 1080p</span>
           </div>
 
-          <div class="player-mask-bottom-right" onclick="togglePlayerPlayback()" title="Course Wallah Platform">
-            <img src="/static/logo.png" alt="CW" class="player-mask-mini-logo">
+          <div class="player-mask-yt-cover" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
+            <img src="/static/logo.png" alt="Course Wallah" class="yt-cover-logo">
+            <span class="yt-cover-text">COURSE WALLAH</span>
           </div>
         </div>
       </div>
