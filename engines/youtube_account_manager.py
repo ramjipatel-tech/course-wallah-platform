@@ -3,6 +3,7 @@ import json
 import time
 import shutil
 import logging
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple, Callable
@@ -806,7 +807,7 @@ class YouTubeAccountManager:
         if not client_id or not client_secret or not code:
             return {"valid": False, "error": "client_id, client_secret, and authorization code are all required."}
 
-        import httpx
+        import requests
         token_url = "https://oauth2.googleapis.com/token"
         payload = {
             "client_id": client_id.strip(),
@@ -817,32 +818,31 @@ class YouTubeAccountManager:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(token_url, data=payload)
-                if resp.status_code != 200:
-                    err_json = {}
-                    try:
-                        err_json = resp.json()
-                    except Exception:
-                        pass
-                    err_msg = err_json.get("error_description") or err_json.get("error") or resp.text
-                    return {"valid": False, "error": f"Google Token Exchange Failed (HTTP {resp.status_code}): {err_msg}"}
+            resp = await asyncio.to_thread(requests.post, token_url, data=payload, timeout=15)
+            if resp.status_code != 200:
+                err_json = {}
+                try:
+                    err_json = resp.json()
+                except Exception:
+                    pass
+                err_msg = err_json.get("error_description") or err_json.get("error") or resp.text
+                return {"valid": False, "error": f"Google Token Exchange Failed (HTTP {resp.status_code}): {err_msg}"}
 
-                data = resp.json()
-                refresh_token = data.get("refresh_token")
-                access_token = data.get("access_token")
-                if not refresh_token:
-                    return {
-                        "valid": False,
-                        "error": "Google did not return a refresh_token. Please ensure you approved all YouTube permissions and re-authenticate."
-                    }
-
+            data = resp.json()
+            refresh_token = data.get("refresh_token")
+            access_token = data.get("access_token")
+            if not refresh_token:
                 return {
-                    "valid": True,
-                    "refresh_token": refresh_token,
-                    "access_token": access_token
+                    "valid": False,
+                    "error": "Google did not return a refresh_token. Please ensure you approved all YouTube permissions and re-authenticate."
                 }
-        except httpx.TimeoutException:
+
+            return {
+                "valid": True,
+                "refresh_token": refresh_token,
+                "access_token": access_token
+            }
+        except requests.Timeout:
             return {"valid": False, "error": "Request timed out while contacting Google OAuth token endpoint."}
         except Exception as e:
             return {"valid": False, "error": f"Exception exchanging authorization code: {str(e)}"}
