@@ -688,82 +688,212 @@ async function renderAppDetailView(container, appSlugOrId) {
 // 4. BATCH SUBJECTS VIEW (?tab=apps&app=...&batchid=...)
 async function renderBatchView(container, appSlugOrId, batchIdOrSlug) {
   const batch = await fetchBatchDetail(batchIdOrSlug);
-  
+  const subjects = batch.subjects || [];
+
   container.innerHTML = `
-    <div class="section-header-row" style="margin-bottom: 24px;">
-      <h1 class="section-heading" style="font-size: 26px;">${batch.name}</h1>
-      <p class="section-subheading">Portal: ${batch.app_name} • Category: ${batch.category || 'Academic'}</p>
+    <!-- Top Back Navigation -->
+    <div class="batch-detail-header-row" style="margin-bottom: 20px;">
+      <button class="btn-sub-back" onclick="navigateToApp('${appSlugOrId}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Back</span>
+      </button>
     </div>
 
-    <div class="subjects-grid">
-      ${(batch.subjects || []).map(subj => `
-        <div class="subject-card" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subj.slug || subj.id}')">
-          <div>
-            <div class="subject-header-row">
-              <div class="subject-icon-box">📚</div>
-              <div>
-                <h3 class="subject-title">${subj.name}</h3>
-                <span class="subject-teacher">FACULTY: Course Wallah & TC</span>
+    <!-- Promo Announcement Banner -->
+    <div class="promo-banner">
+      <div>
+        <span class="promo-tag">COURSE WALLAH &bull; SECURE PLATFORM</span>
+        <h2 class="promo-title">${batch.name}</h2>
+        <p style="font-size:13px; opacity:0.9;">Explore our complete subject modules hosting high-definition video lectures, verified DPPs & study notes.</p>
+      </div>
+      <a href="https://t.me/coursewallahoffical1" target="_blank" class="btn-promo-action">Join Channel</a>
+    </div>
+
+    <!-- Subjects Section Title & Search Input -->
+    <div class="subjects-header-bar">
+      <h2 class="subjects-title-count">Subjects <span class="count-badge">(${subjects.length})</span></h2>
+      <div class="subject-search-box">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="subject-search-input" placeholder="Search subject..." oninput="filterSubjectsList(this.value)">
+      </div>
+    </div>
+
+    <!-- 2-Column Subjects Grid (Matching Reference Screenshot 2) -->
+    <div class="subjects-modern-grid" id="subjects-grid-list">
+      ${subjects.map((subj, idx) => {
+        const letter = (subj.name || 'S').trim().charAt(0).toUpperCase();
+        const vCount = subj.video_count || 0;
+        const nCount = subj.notes_count || 0;
+        return `
+          <div class="subject-modern-card" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subj.slug || subj.id}')">
+            <div class="subject-card-left">
+              <div class="subject-avatar-badge">${letter}</div>
+              <div class="subject-text-wrap">
+                <h3 class="subject-name-heading">${subj.name}</h3>
+                <span class="subject-meta-counts">${vCount} Videos &bull; ${nCount} Notes &bull; 0 Tests</span>
               </div>
             </div>
+            <div class="subject-card-arrow">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
           </div>
-          <div class="subject-stats-row">
-            <span class="subject-stat-pill">🎥 ${(subj.folders || []).reduce((acc, f) => acc + (f.lectures ? f.lectures.length : 0), 0)} Lectures</span>
-            <span class="subject-stat-pill">📄 Verified Notes</span>
-          </div>
-        </div>
-      `).join('')}
+        `;
+      }).join('')}
     </div>
   `;
 }
 
-// 5. SUBJECT FOLDERS & LECTURES VIEW (?tab=apps&app=...&batchid=...&subjectid=...)
+function filterSubjectsList(query) {
+  const q = (query || '').toLowerCase().trim();
+  document.querySelectorAll('.subject-modern-card').forEach(card => {
+    const title = (card.querySelector('.subject-name-heading')?.innerText || '').toLowerCase();
+    card.style.display = title.includes(q) ? 'flex' : 'none';
+  });
+}
+
+// 5. SUBJECT CONTENT EXPLORER (VIDEOS VS NOTES SEPARATED — Screenshot 3)
+let activeSubjectSubTab = 'videos';
+
 async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectIdOrSlug) {
   const batch = await fetchBatchDetail(batchIdOrSlug);
-  const subject = (batch.subjects || []).find(s => s.slug === subjectIdOrSlug || s.id === subjectIdOrSlug) || (batch.subjects || [])[0];
+  const subjects = batch.subjects || [];
+  const subject = subjects.find(s => s.slug === subjectIdOrSlug || s.id === subjectIdOrSlug) || subjects[0] || { name: 'Subject Explorer', folders: [] };
+
+  // Separate videos and notes strictly
+  const allLectures = (subject.folders || []).flatMap(f => f.lectures || []);
+  const videoLectures = allLectures.filter(l => l.has_video);
+  const noteLectures = allLectures.filter(l => l.has_pdf);
 
   container.innerHTML = `
-    <div class="section-header-row" style="margin-bottom: 24px;">
-      <h1 class="section-heading" style="font-size: 24px;">${subject ? subject.name : 'Subject Explorer'}</h1>
-      <p class="section-subheading">Batch: ${batch.name}</p>
+    <!-- Top Back Bar -->
+    <div class="batch-detail-header-row" style="margin-bottom: 20px;">
+      <button class="btn-sub-back" onclick="navigateToBatch('${appSlugOrId}', '${batchIdOrSlug}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Back</span>
+      </button>
     </div>
 
-    <!-- Folders Hierarchy -->
-    <div class="lectures-list-container">
-      ${(subject.folders || []).map(folder => `
-        <div style="margin-bottom: 20px;">
-          <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px; color: var(--primary); display:flex; align-items:center; gap:8px;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <span>${folder.name}</span>
-          </h3>
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            ${(folder.lectures || []).map(lec => `
-              <div class="lecture-item-card">
-                <div class="lecture-left">
-                  <span class="lecture-idx-pill">#${String(lec.index || 1).padStart(3, '0')}</span>
-                  <div class="lecture-info-wrap">
-                    <h4 class="lecture-title">${lec.title}</h4>
-                    <span class="lecture-subinfo">⏱️ ${Math.round((lec.duration_seconds || 1800)/60)} mins • Verified Stream</span>
-                  </div>
-                </div>
-                <div class="lecture-actions">
-                  <button class="btn-play-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lec.id}')">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    <span>Play</span>
-                  </button>
-                  ${lec.has_pdf ? `
-                    <button class="btn-view-notes" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lec.id}')">
-                      <span>Notes</span>
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `).join('')}
+    <!-- Subject Hero Header Card (Screenshot 3) -->
+    <div class="subject-hero-card">
+      <div class="subject-hero-left">
+        <div class="subject-hero-app-row">
+          <img src="/static/logo.png" alt="Course Wallah" class="subject-hero-app-logo">
+          <div class="subject-hero-app-info">
+            <span class="subject-hero-app-name">${batch.app_name || 'Course Wallah'}</span>
+            <span class="subject-hero-secure-tag">● SECURE CLIENT SESSION ACTIVE</span>
           </div>
         </div>
-      `).join('')}
+        <h1 class="subject-hero-title">${subject.name}</h1>
+      </div>
+
+      <!-- Filter Pills: Videos vs Notes & PDFs -->
+      <div class="subject-tab-pills-wrap">
+        <button class="sub-filter-pill ${activeSubjectSubTab === 'videos' ? 'active' : ''}" id="pill-sub-videos" onclick="switchSubjectSubTab('videos')">
+          Videos <span class="pill-count">${videoLectures.length}</span>
+        </button>
+        <button class="sub-filter-pill ${activeSubjectSubTab === 'notes' ? 'active' : ''}" id="pill-sub-notes" onclick="switchSubjectSubTab('notes')">
+          Notes &amp; PDFs <span class="pill-count">${noteLectures.length}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 1: Videos Grid -->
+    <div class="subject-content-section ${activeSubjectSubTab === 'videos' ? '' : 'hidden'}" id="subject-videos-panel">
+      ${videoLectures.length === 0 ? `
+        <div class="empty-content-box">
+          <div class="empty-icon">🎥</div>
+          <h3>No video lectures uploaded yet</h3>
+          <p>This unit currently contains study materials and notes in the Notes &amp; PDFs tab.</p>
+        </div>
+      ` : `
+        <div class="videos-cards-grid">
+          ${videoLectures.map((lec) => `
+            <div class="video-lecture-card" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lec.id}')">
+              <div class="video-card-thumb-wrap">
+                <img src="${lec.thumbnail_url || batch.thumbnail_url || '/static/logo.png'}" alt="${lec.title}" class="video-card-thumb" onerror="this.src='/static/logo.png'">
+                <div class="video-watermark-tag">COURSE WALLAH</div>
+                <div class="video-duration-tag">⏱️ ${Math.round((lec.duration_seconds || 1500) / 60)} mins</div>
+                <div class="video-play-overlay">
+                  <div class="video-play-btn-circle">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </div>
+                </div>
+              </div>
+              <div class="video-card-body">
+                <h3 class="video-card-title" title="${lec.title}">${lec.title}</h3>
+                <div class="video-card-footer">
+                  <span>📅 ${lec.created_at || 'Recent'}</span>
+                  <span class="video-lec-idx">Lecture #${lec.index}</span>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+
+    <!-- Tab 2: Notes & PDFs Grid -->
+    <div class="subject-content-section ${activeSubjectSubTab === 'notes' ? '' : 'hidden'}" id="subject-notes-panel">
+      ${noteLectures.length === 0 ? `
+        <div class="empty-content-box">
+          <div class="empty-icon">📄</div>
+          <h3>No PDF notes in this unit</h3>
+          <p>Please check the Videos tab for class recordings.</p>
+        </div>
+      ` : `
+        <div class="notes-cards-grid">
+          ${noteLectures.map(note => {
+            const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/access`;
+            return `
+              <div class="note-pdf-card">
+                <div class="note-card-left">
+                  <div class="note-pdf-icon-box">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <div class="note-info-wrap">
+                    <h3 class="note-card-title">${note.title}</h3>
+                    <span class="note-card-sub">Verified Study Material &bull; PDF DPP &bull; High Definition</span>
+                  </div>
+                </div>
+                <div class="note-card-actions">
+                  <button class="btn-note-view" onclick="openPdfModal('${pdfUrl}', '${note.title.replace(/'/g, "\\'")}')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>View PDF</span>
+                  </button>
+                  <a href="${pdfUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download</span>
+                  </a>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
     </div>
   `;
+}
+
+function switchSubjectSubTab(tab) {
+  activeSubjectSubTab = tab;
+  const pVid = document.getElementById('pill-sub-videos');
+  const pNot = document.getElementById('pill-sub-notes');
+  const bVid = document.getElementById('subject-videos-panel');
+  const bNot = document.getElementById('subject-notes-panel');
+
+  if (pVid && pNot && bVid && bNot) {
+    if (tab === 'videos') {
+      pVid.classList.add('active');
+      pNot.classList.remove('active');
+      bVid.classList.remove('hidden');
+      bNot.classList.add('hidden');
+    } else {
+      pNot.classList.add('active');
+      pVid.classList.remove('active');
+      bNot.classList.remove('hidden');
+      bVid.classList.add('hidden');
+    }
+  }
 }
 
 // 6. IN-APP CINEMA VIDEO PLAYER VIEW (...#playing)
@@ -771,18 +901,35 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   const lecture = await fetchLectureDetails(lectureId);
   const access = await fetchLectureAccess(lectureId);
 
+  // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
+  const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
+
   container.innerHTML = `
+    <!-- Top Back Navigation -->
+    <div class="player-top-nav-bar">
+      <button class="btn-sub-back" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Back to Subject</span>
+      </button>
+      <div class="player-nav-crumbs">
+        <span>${lecture.batch_name || 'Batch'}</span> &bull; <span>${lecture.subject_name || 'Subject'}</span>
+      </div>
+    </div>
+
     <div class="player-studio-layout">
       
       <!-- Main Column: Video Player & Details -->
       <div class="player-main-column">
         <div class="video-frame-container" id="player-container">
           ${access.youtube_video_id ? `
-            <iframe class="video-iframe" src="https://www.youtube.com/embed/${access.youtube_video_id}?autoplay=1&enablejsapi=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+            <iframe class="video-iframe" src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?autoplay=1&modestbranding=1&rel=0&iv_load_policy=3&controls=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
           ` : `
-            <div style="display:flex; align-items:center; justify-content:center; height:100%; color:#FFF; font-weight:700;">Video stream processing...</div>
+            <div class="video-placeholder-box">
+              <div class="spinner"></div>
+              <span>Preparing high-speed video stream...</span>
+            </div>
           `}
-          <div class="security-watermark-overlay">COURSE WALLAH • CW-ID-${lectureId.slice(0,6)}</div>
+          <div class="security-watermark-overlay">COURSE WALLAH &bull; CW-ID-${lectureId.slice(0,6)}</div>
         </div>
 
         <!-- Controls Bar -->
@@ -793,60 +940,191 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <button class="btn-speed-pill ${spd === '1x' ? 'active' : ''}" onclick="setPlaybackSpeed('${spd}', this)">${spd}</button>
             `).join('')}
           </div>
-          <div>
-            <button class="btn-view-notes" onclick="toggleBookmark('${lecture.id}', '${lecture.title}')">
+          <div class="player-action-btns">
+            <button class="btn-save-lecture" onclick="toggleBookmark('${lecture.id}', '${lecture.title}')">
               <span>🔖 Save</span>
             </button>
           </div>
         </div>
 
-        <!-- Lecture Details -->
+        <!-- Lecture Details & Attached Notes -->
         <div class="player-lecture-details">
-          <div class="player-breadcrumbs-row">
-            <span>${lecture.app_name || 'Course Wallah'}</span> • 
-            <span>${lecture.batch_name || 'Batch'}</span> • 
-            <span>${lecture.subject_name || 'Subject'}</span>
+          <div class="player-lecture-header-row">
+            <div>
+              <span class="player-lec-num-pill">LECTURE #${lecture.index}</span>
+              <h1 class="player-lecture-title">${lecture.title}</h1>
+            </div>
           </div>
-          <h1 class="player-lecture-title">#${String(lecture.index || 1).padStart(3, '0')} ${lecture.title}</h1>
-          <p style="font-size:14px; color:var(--text-secondary); line-height:1.6;">High-speed streaming lecture provided with verified companion study notes.</p>
+
+          ${access.pdf_download_url ? `
+            <div class="player-attached-note-banner">
+              <div class="attached-note-left">
+                <div class="note-icon-glow">📄</div>
+                <div>
+                  <h4 class="attached-note-title">Companion Class Notes &amp; DPP</h4>
+                  <span class="attached-note-sub">Official verified study material for this lecture</span>
+                </div>
+              </div>
+              <div class="attached-note-actions">
+                <button class="btn-attached-view" onclick="openPdfModal('${access.pdf_download_url}', '${lecture.title.replace(/'/g, "\\'")}')">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span>Read Notes</span>
+                </button>
+                <a href="${access.pdf_download_url}" target="_blank" download class="btn-attached-download">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download PDF</span>
+                </a>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Previous / Next Sibling Navigation -->
+          <div class="player-prev-next-row">
+            ${lecture.prev_lecture ? `
+              <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.prev_lecture.id}')">
+                <span>&larr; Previous: #${lecture.prev_lecture.index} ${lecture.prev_lecture.title}</span>
+              </button>
+            ` : '<div></div>'}
+            ${lecture.next_lecture ? `
+              <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.next_lecture.id}')">
+                <span>Next: #${lecture.next_lecture.index} ${lecture.next_lecture.title} &rarr;</span>
+              </button>
+            ` : '<div></div>'}
+          </div>
         </div>
       </div>
 
-      <!-- Right Column: Playlist & Notes Drawer -->
+      <!-- Right Column: Video Lectures List ONLY -->
       <div class="player-sidebar-drawer">
-        <div class="drawer-tabs-header">
-          <button class="drawer-tab-btn active" id="drawer-tab-playlist" onclick="switchDrawerTab('playlist')">Playlist</button>
-          <button class="drawer-tab-btn" id="drawer-tab-notes" onclick="switchDrawerTab('notes')">Notes & PDFs</button>
+        <div class="drawer-header-title">
+          <span>Lectures in Unit</span>
+          <span class="drawer-count-badge">${videoPlaylist.length}</span>
         </div>
 
-        <!-- Playlist Tab -->
-        <div class="drawer-scroll-body" id="drawer-playlist-body">
-          ${(lecture.playlist || []).map(item => `
+        <div class="drawer-scroll-body">
+          ${videoPlaylist.map(item => `
             <div class="playlist-item-card ${item.id === lectureId ? 'active' : ''}" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${item.id}')">
-              <span style="font-size:11px; font-weight:800; font-family:var(--font-mono); color:var(--primary);">#${String(item.index || 1).padStart(2, '0')}</span>
+              <span class="playlist-lec-num">#${String(item.index || 1).padStart(2, '0')}</span>
               <span class="playlist-item-title">${item.title}</span>
+              ${item.id === lectureId ? '<span class="playlist-playing-tag">PLAYING</span>' : ''}
             </div>
           `).join('')}
         </div>
-
-        <!-- Notes Tab -->
-        <div class="drawer-scroll-body hidden" id="drawer-notes-body">
-          <div class="notes-preview-wrap">
-            <svg class="notes-preview-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary); margin-bottom:4px;">Lecture Notes & DPPs</h3>
-            <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Official verified class PDF notes.</p>
-            <a href="${access.pdf_download_url || '#'}" target="_blank" class="btn-notes-download">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>Download Clean PDF</span>
-            </a>
-          </div>
-        </div>
-
       </div>
 
     </div>
   `;
 }
+
+// IN-APP PDF READER MODAL (PDF.js Canvas Renderer)
+let currentPdfDoc = null;
+let currentPdfPage = 1;
+let currentPdfScale = 1.2;
+
+async function openPdfModal(pdfUrl, title) {
+  let modal = document.getElementById('cw-pdf-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'cw-pdf-modal';
+    modal.className = 'cw-pdf-modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="cw-pdf-modal-card">
+      <div class="cw-pdf-header">
+        <div class="cw-pdf-title-wrap">
+          <span class="pdf-file-icon">📄</span>
+          <span class="cw-pdf-title">${escapeHtml(title)}</span>
+        </div>
+        <div class="cw-pdf-controls">
+          <button class="btn-pdf-ctrl" onclick="changePdfPage(-1)" title="Previous Page">&larr; Prev</button>
+          <span class="pdf-page-display" id="pdf-page-num">Page <strong id="pdf-current-page">1</strong> of <span id="pdf-total-pages">1</span></span>
+          <button class="btn-pdf-ctrl" onclick="changePdfPage(1)" title="Next Page">Next &rarr;</button>
+          <button class="btn-pdf-ctrl" onclick="zoomPdf(0.2)" title="Zoom In">🔍 +</button>
+          <button class="btn-pdf-ctrl" onclick="zoomPdf(-0.2)" title="Zoom Out">🔍 -</button>
+          <a href="${pdfUrl}" target="_blank" download class="btn-pdf-download-modal" title="Download Clean PDF">⬇️ Download</a>
+          <button class="btn-pdf-close" onclick="closePdfModal()" title="Close Viewer">&times;</button>
+        </div>
+      </div>
+      <div class="cw-pdf-canvas-container" id="cw-pdf-container">
+        <canvas id="cw-pdf-canvas"></canvas>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+
+  try {
+    if (typeof pdfjsLib !== 'undefined') {
+      const loadingTask = pdfjsLib.getDocument(pdfUrl);
+      currentPdfDoc = await loadingTask.promise;
+      currentPdfPage = 1;
+      const totalEl = document.getElementById('pdf-total-pages');
+      if (totalEl) totalEl.innerText = currentPdfDoc.numPages;
+      await renderPdfPage(currentPdfPage);
+    } else {
+      throw new Error('PDF.js not loaded');
+    }
+  } catch (err) {
+    console.debug('PDF.js canvas fallback to direct embed:', err);
+    const container = document.getElementById('cw-pdf-container');
+    if (container) {
+      container.innerHTML = `
+        <iframe src="${pdfUrl}" style="width:100%; height:75vh; border:none; border-radius:12px;"></iframe>
+      `;
+    }
+  }
+}
+
+async function renderPdfPage(num) {
+  if (!currentPdfDoc) return;
+  try {
+    const page = await currentPdfDoc.getPage(num);
+    const canvas = document.getElementById('cw-pdf-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const viewport = page.getViewport({ scale: currentPdfScale });
+
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    const renderContext = {
+      canvasContext: ctx,
+      viewport: viewport
+    };
+    await page.render(renderContext).promise;
+
+    const pageNumEl = document.getElementById('pdf-current-page');
+    if (pageNumEl) pageNumEl.innerText = num;
+  } catch (ex) {
+    console.debug('Page render error:', ex);
+  }
+}
+
+function changePdfPage(delta) {
+  if (!currentPdfDoc) return;
+  const newPage = currentPdfPage + delta;
+  if (newPage >= 1 && newPage <= currentPdfDoc.numPages) {
+    currentPdfPage = newPage;
+    renderPdfPage(currentPdfPage);
+  }
+}
+
+function zoomPdf(delta) {
+  currentPdfScale = Math.max(0.6, Math.min(2.5, currentPdfScale + delta));
+  renderPdfPage(currentPdfPage);
+}
+
+function closePdfModal() {
+  const modal = document.getElementById('cw-pdf-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  document.body.style.overflow = '';
+}
+
 
 function switchDrawerTab(tab) {
   const pTab = document.getElementById('drawer-tab-playlist');

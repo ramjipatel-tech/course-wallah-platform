@@ -54,19 +54,28 @@ async def get_batch_hierarchy(batch_id_or_slug: str, db: AsyncSession = Depends(
                         "duration_seconds": l.duration_seconds,
                         "has_video": l.has_video,
                         "has_pdf": l.has_pdf,
-                        "thumbnail_url": l.thumbnail_url
+                        "source_pdf_url": l.source_pdf_url,
+                        "thumbnail_url": l.thumbnail_url,
+                        "created_at": l.created_at.strftime("%b %d, %Y") if l.created_at else "Recent"
                     }
                     for l in published_lectures
                 ]
             })
+
+        all_sub_lecs = [lec for f in folders_data for lec in f["lectures"]]
+        video_count = sum(1 for lec in all_sub_lecs if lec["has_video"])
+        notes_count = sum(1 for lec in all_sub_lecs if lec["has_pdf"])
 
         subjects_data.append({
             "id": subj.id,
             "name": subj.name,
             "slug": subj.slug,
             "code": subj.code,
+            "video_count": video_count,
+            "notes_count": notes_count,
             "folders": folders_data
         })
+
 
     return {
         "id": batch.id,

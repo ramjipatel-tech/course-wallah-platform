@@ -102,12 +102,14 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
             "message": "This lecture contains study material only."
         }
 
+    pdf_url = lecture.source_pdf_url or (f"/api/v1/pdfs/{lecture.id}/content" if lecture.pdf else None)
     return {
         "has_video": True,
         "has_pdf": lecture.has_pdf,
         "title": lecture.title,
         "duration": video.duration,
         "youtube_video_id": video.youtube_video_id,
+        "pdf_download_url": pdf_url,
         "player_config": {
             "autoplay": False,
             "controls": True,
@@ -115,3 +117,4 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
             "quality": video.resolution or "1080p"
         }
     }
+

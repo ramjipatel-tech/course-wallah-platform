@@ -404,7 +404,27 @@ class ContentProcessingEngine:
                 has_valid_checkpoint = True
                 logger.info(f"[CHECKPOINT_RESUMED] lecture_index=#{item.index} Reusing prepared watermarked artifact: {watermarked_video_path}")
 
-            if has_valid_checkpoint:
+            # Check DB if lecture was already processed and uploaded in a previous run
+            is_already_uploaded = False
+            async with get_db_session() as chk_s:
+                chk_repo = ContentRepository(chk_s)
+                existing_lec = await chk_repo.get_lecture_by_index(batch_id, item.index)
+                if existing_lec and existing_lec.video and existing_lec.video.youtube_video_id:
+                    youtube_video_id = existing_lec.video.youtube_video_id
+                    youtube_channel_id = existing_lec.video.youtube_channel_id
+                    youtube_account_id = existing_lec.video.youtube_account_id
+                    youtube_url = existing_lec.video.youtube_url
+                    is_already_uploaded = True
+                    phase_states["download"] = "✅"
+                    phase_states["watermark"] = "✅"
+                    phase_states["thumbnail"] = "✅"
+                    phase_states["youtube"] = "✅"
+                    logger.info(f"[ALREADY_PROCESSED] lecture_index=#{item.index} title='{item.title}' ALREADY uploaded to YouTube -> ID: {youtube_video_id}. Auto-skipping download & upload!")
+                    await _update_telegram_ui(f"Lecture #{item.index} already uploaded ({youtube_video_id}) - auto-skipped.", dl_pct=100.0, yt_pct=100.0)
+
+            if is_already_uploaded:
+                pass # Already uploaded, will proceed to check PDF/DB
+            elif has_valid_checkpoint:
                 phase_states["download"] = "✅"
                 phase_states["watermark"] = "✅"
                 phase_states["thumbnail"] = "✅"
@@ -417,6 +437,7 @@ class ContentProcessingEngine:
                 phase_states["download"] = "🔄"
                 await _update_telegram_ui("Downloading source video...", dl_pct=15.0)
                 logger.info(f"[DOWNLOAD_STARTED] lecture_index=#{item.index} url={sanitize_url_for_logging(item.video_url)}")
+
 
                 last_dl_err = None
                 for attempt in range(1, MAX_RETRIES + 1):
