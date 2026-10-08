@@ -29,6 +29,7 @@ venv/
 
 # Node.js & Next.js
 node_modules/
+package-lock.json
 .next/
 out/
 build/
