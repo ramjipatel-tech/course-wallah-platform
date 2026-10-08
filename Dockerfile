@@ -6,10 +6,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
-# Install system dependencies including FFmpeg and fonts for watermarking
+# Install system dependencies including build-essential, python3-dev, libc6-dev, FFmpeg, and fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
+    build-essential \
+    python3-dev \
+    libc6-dev \
     gcc \
+    ffmpeg \
     curl \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
