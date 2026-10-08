@@ -2386,6 +2386,8 @@ body.theme-dark .playlist-item-card.active {
   .dev-role-pills {
     justify-content: center;
   }
+}
+
 .live-dot-pulse {
   width: 8px;
   height: 8px;
