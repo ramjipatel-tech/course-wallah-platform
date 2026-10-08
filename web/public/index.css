@@ -3764,8 +3764,8 @@ body.theme-light .guidance-hint-item {
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 18px;
-  overflow: hidden;
-  background: #07090E;
+  overflow: hidden !important;
+  background: #000000;
 }
 
 .as-video-inner-wrap .plyr {
@@ -3780,12 +3780,17 @@ body.theme-light .guidance-hint-item {
   aspect-ratio: 16 / 9;
   width: 100%;
   height: 100%;
+  overflow: hidden !important;
 }
 
-.as-video-inner-wrap .plyr__video-embed iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
+/* Crop & scale YouTube iframe so top header, channel info, and bottom-right watermark are pushed outside viewport */
+.as-video-inner-wrap .plyr__video-embed iframe,
+.as-video-inner-wrap iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  transform: scale(1.16) !important;
+  transform-origin: center center !important;
 }
 
 /* Big center play button styling */
@@ -3806,23 +3811,6 @@ body.theme-light .guidance-hint-item {
   justify-content: center;
   gap: 16px;
   color: var(--text-muted);
-}
-
-.security-watermark-overlay {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 10px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 6px;
-  pointer-events: none;
-  letter-spacing: 0.05em;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 10;
 }
 
 .player-attached-note-banner {
@@ -4151,53 +4139,6 @@ body.theme-light .guidance-hint-item {
 }
 
 /* ==============================================================================
-   DYNAMIC OSCILLATING WATERMARK
-   ============================================================================== */
-
-.security-watermark-overlay {
-  position: absolute;
-  top: 15%;
-  left: 15%;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.35);
-  letter-spacing: 1px;
-  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-  z-index: 20;
-  user-select: none;
-  -webkit-user-select: none;
-  animation: floatWatermark 12s infinite alternate ease-in-out;
-}
-
-@keyframes floatWatermark {
-  0% { top: 12%; left: 10%; transform: rotate(-2deg); opacity: 0.28; }
-  25% { top: 70%; left: 55%; transform: rotate(1deg); opacity: 0.45; }
-  50% { top: 40%; left: 25%; transform: rotate(-1deg); opacity: 0.3; }
-  75% { top: 20%; left: 65%; transform: rotate(2deg); opacity: 0.42; }
-  100% { top: 65%; left: 15%; transform: rotate(-2deg); opacity: 0.35; }
-}
-
-.pdf-watermark-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 800;
-  color: rgba(99, 102, 241, 0.12);
-  transform: rotate(-25deg);
-  letter-spacing: 3px;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-/* ==============================================================================
    ANTI-PRINT & SCREEN CAPTURE BLACKOUT
    ============================================================================== */
 
@@ -4210,6 +4151,7 @@ body.theme-light .guidance-hint-item {
     width: 0 !important;
   }
 }
+
 
 
 

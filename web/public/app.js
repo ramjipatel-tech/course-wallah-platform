@@ -968,7 +968,7 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
           ${access.youtube_video_id ? `
             <div class="plyr__video-embed" id="cw-plyr-element">
               <iframe
-                src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?origin=${window.location.origin}&iv_load_policy=3&modestbranding=1&playsinline=1&showinfo=0&rel=0&enablejsapi=1"
+                src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?origin=${encodeURIComponent(window.location.origin)}&iv_load_policy=3&modestbranding=1&playsinline=1&showinfo=0&rel=0&enablejsapi=1&controls=0&disablekb=1&fs=0&widget_referrer=${encodeURIComponent(window.location.origin)}"
                 allowfullscreen
                 allowtransparency
                 allow="autoplay"
@@ -980,7 +980,6 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span>Preparing high-speed video stream...</span>
             </div>
           `}
-          <div class="security-watermark-overlay" id="player-watermark">${watermarkText}</div>
         </div>
       </div>
 
@@ -1112,7 +1111,17 @@ function initPlyr() {
         speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
         seekTime: 10,
         keyboard: { focused: true, global: true },
-        tooltips: { controls: true, seek: true }
+        tooltips: { controls: true, seek: true },
+        youtube: {
+          noCookie: true,
+          rel: 0,
+          showinfo: 0,
+          iv_load_policy: 3,
+          modestbranding: 1,
+          controls: 0,
+          disablekb: 1,
+          customControls: true
+        }
       });
     } catch (e) {
       console.debug('Plyr initialization fallback:', e);
@@ -1124,7 +1133,7 @@ function showAnnouncementModal(batchName) {
   showToast(`📢 ${batchName}: All classes and DPP notes are synced and verified in high definition!`);
 }
 
-// IN-APP PDF READER MODAL (PDF.js Canvas Renderer with DRM Watermark)
+// IN-APP PDF READER MODAL (PDF.js Clean Canvas Renderer)
 let currentPdfDoc = null;
 let currentPdfPage = 1;
 let currentPdfScale = 1.2;
@@ -1148,8 +1157,6 @@ async function openPdfModal(pdfUrl, title) {
     }
   }
 
-  const watermarkText = window.CW_SECURITY ? window.CW_SECURITY.getWatermarkText() : 'COURSE WALLAH • SECURE STREAM • ENCRYPTED';
-
   modal.innerHTML = `
     <div class="cw-pdf-modal-card">
       <div class="cw-pdf-header">
@@ -1168,7 +1175,6 @@ async function openPdfModal(pdfUrl, title) {
       </div>
       <div class="cw-pdf-canvas-container" id="cw-pdf-container">
         <div class="spinner" id="pdf-loading-spinner" style="margin: 40px auto;"></div>
-        <div class="pdf-watermark-overlay">${watermarkText}</div>
         <canvas id="cw-pdf-canvas" style="display:none;"></canvas>
       </div>
     </div>
