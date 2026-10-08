@@ -167,51 +167,67 @@ class NativeMediaHelper:
             if file_val and isinstance(file_val, str) and cls._is_pdf_url(file_val):
                 pdf_url = file_val.strip()
 
-        # 3. Extract Video Stream URL
+        # 3. Extract Video Stream URL (Prioritize Highest HD: 1080p -> 720p -> 480p)
         video_url = None
+        resolved_quality = "720p"
         qualities = d.get("encrypted_links") or d.get("download_links") or d.get("qualities") or d.get("streams") or d.get("video_urls")
         if isinstance(qualities, list) and qualities:
+            def extract_res_score(item: Any) -> int:
+                if not isinstance(item, dict):
+                    return 0
+                text = f"{item.get('quality', '')} {item.get('bitrate', '')} {item.get('label', '')} {item.get('resolution', '')} {item.get('path', '')} {item.get('url', '')}"
+                found = re.findall(r"\b(1080|720|480|360|240)\b", text)
+                if found:
+                    return max(int(x) for x in found)
+                m = re.search(r"\d+", text)
+                return int(m.group(0)) if m else 0
+
+            # Filter non-PDF candidates and sort descending by resolution score
+            valid_candidates = []
+            for q_item in qualities:
+                if isinstance(q_item, dict):
+                    cand = (
+                        q_item.get("path")
+                        or q_item.get("backup_url")
+                        or q_item.get("backup_url2")
+                        or q_item.get("link")
+                        or q_item.get("url")
+                        or q_item.get("video_url")
+                    )
+                    if cand and isinstance(cand, str) and cand.strip():
+                        cand_str = cand.strip()
+                        if cls._is_pdf_url(cand_str):
+                            if not pdf_url:
+                                pdf_url = cand_str
+                        else:
+                            score = extract_res_score(q_item)
+                            valid_candidates.append((score, cand_str, q_item))
+
+            # Sort descending by resolution (e.g. 1080 > 720 > 480 > 360)
+            valid_candidates.sort(key=lambda x: x[0], reverse=True)
+
             target_num = re.search(r"\d+", str(target_quality)) if target_quality else None
-            matched_q = None
+            matched_cand = None
+
             if target_num:
-                target_val = target_num.group(0)
-                for q_item in qualities:
-                    if isinstance(q_item, dict):
-                        q_label = str(q_item.get("quality") or q_item.get("bitrate") or q_item.get("label") or q_item.get("resolution") or "")
-                        if target_val in q_label:
-                            cand = (
-                                q_item.get("path")
-                                or q_item.get("backup_url")
-                                or q_item.get("backup_url2")
-                                or q_item.get("link")
-                                or q_item.get("url")
-                                or q_item.get("video_url")
-                            )
-                            if cand and isinstance(cand, str) and not cls._is_pdf_url(cand):
-                                matched_q = cand
-                                break
-                            elif cand and isinstance(cand, str) and not pdf_url:
-                                pdf_url = cand.strip()
-            if not matched_q:
-                # Pick highest quality / first available non-PDF stream
-                for q_item in qualities:
-                    if isinstance(q_item, dict):
-                        cand = (
-                            q_item.get("path")
-                            or q_item.get("backup_url")
-                            or q_item.get("backup_url2")
-                            or q_item.get("link")
-                            or q_item.get("url")
-                            or q_item.get("video_url")
-                        )
-                        if cand and isinstance(cand, str) and cand.strip():
-                            if not cls._is_pdf_url(cand):
-                                matched_q = cand.strip()
-                                break
-                            elif not pdf_url:
-                                pdf_url = cand.strip()
-            if matched_q:
-                video_url = str(matched_q).strip()
+                target_val = int(target_num.group(0))
+                # Look for exact match or closest high quality
+                for score, cand_url, _ in valid_candidates:
+                    if score == target_val:
+                        matched_cand = cand_url
+                        resolved_quality = f"{score}p"
+                        break
+                if not matched_cand and valid_candidates:
+                    # Pick highest available resolution
+                    matched_cand = valid_candidates[0][1]
+                    resolved_quality = f"{valid_candidates[0][0]}p" if valid_candidates[0][0] > 0 else "720p"
+            elif valid_candidates:
+                # Default / AUTO / BEST: Pick highest available resolution (e.g., 1080p or 720p)
+                matched_cand = valid_candidates[0][1]
+                resolved_quality = f"{valid_candidates[0][0]}p" if valid_candidates[0][0] > 0 else "720p"
+
+            if matched_cand:
+                video_url = matched_cand
 
         # Fallback to direct field links (strictly ignoring PDF links)
         if not video_url:
@@ -287,7 +303,7 @@ class NativeMediaHelper:
             thumbnail=thumbnail or None,
             video_id=video_id or None,
             course_id=course_id or None,
-            video_quality=target_quality or "720p",
+            video_quality=resolved_quality or target_quality or "720p",
             is_drm=is_drm,
             drm_message=drm_msg,
             has_video=bool(video_url),
@@ -305,7 +321,7 @@ class NativeMediaHelper:
     ) -> str:
         """
         Downloads HLS (.m3u8) streams via yt-dlp or ffmpeg into clean, validated MP4 containers
-        using appropriate Referer and Origin headers.
+        using appropriate Referer and Origin headers and maximum resolution selection.
         """
         dest_dir = Path(custom_dir)
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -332,9 +348,9 @@ class NativeMediaHelper:
                 custom_dir=custom_dir
             )
 
-        # 1. Attempt download using yt-dlp
+        # 1. Attempt download using yt-dlp (Selecting highest 1080p/720p quality stream)
         try:
-            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via yt-dlp: {clean_title}")
+            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via yt-dlp (best HD quality): {clean_title}")
             cmd = [
                 sys.executable, "-m", "yt_dlp",
                 "--no-check-certificates",
@@ -342,6 +358,8 @@ class NativeMediaHelper:
                 "-N", "8",
                 "--retries", "10",
                 "--fragment-retries", "10",
+                "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+                "--format-sort", "res:1080,res:720,res:480,res,fps,br",
                 "--add-header", f"Referer:{req_headers['Referer']}",
                 "--add-header", f"Origin:{req_headers['Origin']}",
                 "-o", str(out_file),

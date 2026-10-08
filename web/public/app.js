@@ -981,17 +981,21 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
             </div>
           `}
 
-          <!-- Sleek Course Wallah Corner Brand Masks (Hides YouTube icons without cutting video) -->
-          <div class="player-mask-top-left" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
-            <img src="/static/logo.png" alt="Course Wallah" class="player-mask-logo">
-            <span class="player-mask-title">COURSE WALLAH</span>
+          <!-- Full-Width Continuous Sleek Header Bar across top of video (100% Covers YouTube Title, Channel, and Share buttons) -->
+          <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
+            <div class="player-top-brand">
+              <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">
+              <span class="player-top-pill">COURSE WALLAH</span>
+              <span class="player-top-sep">|</span>
+              <span class="player-top-title">${escapeHtml(lecture.title)}</span>
+            </div>
+            <div class="player-top-badge">
+              <span class="player-live-dot"></span>
+              <span class="player-hd-text">ULTRA HD 1080p</span>
+            </div>
           </div>
 
-          <div class="player-mask-top-right" onclick="togglePlayerPlayback()" title="High Definition Stream Active">
-            <span class="player-mask-live-dot"></span>
-            <span class="player-mask-hd-tag">ULTRA HD 1080p</span>
-          </div>
-
+          <!-- Solid Bottom-Right Precision Cover (100% Covers YouTube Logo) -->
           <div class="player-mask-yt-cover" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
             <img src="/static/logo.png" alt="Course Wallah" class="yt-cover-logo">
             <span class="yt-cover-text">COURSE WALLAH</span>
@@ -1003,8 +1007,8 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
       <div class="player-quick-bar">
         <div class="player-quick-group">
           <span class="player-quick-label">⚡ Stream Quality:</span>
-          <button class="player-quality-pill" onclick="setPlayerQuality('1080p')">1080p Full HD</button>
-          <button class="player-quality-pill active" onclick="setPlayerQuality('720p')">720p HD</button>
+          <button class="player-quality-pill active" onclick="setPlayerQuality('1080p')">1080p Full HD</button>
+          <button class="player-quality-pill" onclick="setPlayerQuality('720p')">720p HD</button>
           <button class="player-quality-pill" onclick="setPlayerQuality('480p')">480p SD</button>
           <button class="player-quality-pill" onclick="setPlayerQuality('360p')">360p Fast</button>
         </div>
@@ -1087,6 +1091,23 @@ function setPlayerQuality(qualityStr) {
   document.querySelectorAll('.player-quality-pill').forEach(btn => {
     btn.classList.toggle('active', btn.innerText.includes(qualityStr));
   });
+  const ytQualityMap = {
+    '1080p': 'hd1080',
+    '720p': 'hd720',
+    '480p': 'large',
+    '360p': 'medium'
+  };
+  const targetYt = ytQualityMap[qualityStr] || 'hd1080';
+  if (currentPlyrPlayer && currentPlyrPlayer.embed) {
+    try {
+      if (typeof currentPlyrPlayer.embed.setPlaybackQuality === 'function') {
+        currentPlyrPlayer.embed.setPlaybackQuality(targetYt);
+      }
+      if (typeof currentPlyrPlayer.embed.setPlaybackQualityRange === 'function') {
+        currentPlyrPlayer.embed.setPlaybackQualityRange(targetYt, targetYt);
+      }
+    } catch(e) {}
+  }
   showToast(`✨ Quality switched to ${qualityStr} (HD Direct Stream)`);
 }
 
@@ -1125,7 +1146,7 @@ function initPlyr() {
         ],
         settings: ['quality', 'speed', 'loop'],
         quality: {
-          default: 720,
+          default: 1080,
           options: [1080, 720, 480, 360],
           forced: true,
           onChange: (newQuality) => {
@@ -1147,6 +1168,22 @@ function initPlyr() {
           customControls: true
         }
       });
+
+      const enforceHD = () => {
+        if (currentPlyrPlayer && currentPlyrPlayer.embed) {
+          try {
+            if (typeof currentPlyrPlayer.embed.setPlaybackQuality === 'function') {
+              currentPlyrPlayer.embed.setPlaybackQuality('hd1080');
+            }
+            if (typeof currentPlyrPlayer.embed.setPlaybackQualityRange === 'function') {
+              currentPlyrPlayer.embed.setPlaybackQualityRange('hd1080', 'hd1080');
+            }
+          } catch(e) {}
+        }
+      };
+
+      currentPlyrPlayer.on('ready', enforceHD);
+      currentPlyrPlayer.on('playing', enforceHD);
     } catch (e) {
       console.debug('Plyr initialization fallback:', e);
     }

@@ -3793,70 +3793,85 @@ body.theme-light .guidance-hint-item {
   transform-origin: center center !important;
 }
 
-/* Sleek Corner Brand Masks (Cleanly covers YouTube icons with Course Wallah badges) */
-.player-mask-top-left {
+/* Full-Width Continuous Sleek Header Bar across top of video (100% covers YouTube title, channel, share) */
+.player-top-header-bar {
   position: absolute;
-  top: 10px;
-  left: 12px;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(15, 15, 24, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  z-index: 12;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(8, 8, 14, 0.98) 0%, rgba(8, 8, 14, 0.88) 75%, rgba(8, 8, 14, 0) 100%);
+  z-index: 25;
   pointer-events: auto;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 0.2s ease, background 0.2s ease;
 }
 
-.player-mask-top-left:hover {
-  transform: scale(1.03);
-  background: rgba(22, 22, 34, 0.95);
+.player-top-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 75%;
 }
 
-.player-mask-logo {
-  width: 18px;
-  height: 18px;
+.player-top-logo {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
 }
 
-.player-mask-title {
+.player-top-pill {
   font-size: 11px;
   font-weight: 800;
   color: #FFFFFF;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4));
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
 }
 
-.player-mask-top-right {
-  position: absolute;
-  top: 10px;
-  right: 12px;
+.player-top-sep {
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.player-top-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #F1F5F9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.player-top-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(15, 15, 24, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 5px 12px;
+  background: rgba(15, 15, 24, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  z-index: 12;
-  pointer-events: auto;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  user-select: none;
-  -webkit-user-select: none;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  flex-shrink: 0;
 }
 
-.player-mask-live-dot {
+.player-live-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -3864,37 +3879,37 @@ body.theme-light .guidance-hint-item {
   box-shadow: 0 0 8px #10B981;
 }
 
-.player-mask-hd-tag {
-  font-size: 10.5px;
+.player-hd-text {
+  font-size: 10px;
   font-weight: 800;
   color: #38BDF8;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
 }
 
 /* Solid Bottom-Right Precision Cover Badge — 100% hides YouTube watermark/logo */
 .player-mask-yt-cover {
   position: absolute;
   bottom: 8px;
-  right: 10px;
+  right: 8px;
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #0B0B14;
-  padding: 5px 12px;
+  background: #08080E;
+  padding: 6px 14px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  z-index: 25;
+  z-index: 30;
   pointer-events: auto;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.95);
   user-select: none;
   -webkit-user-select: none;
-  height: 28px;
+  height: 32px;
   transition: all 0.2s ease;
 }
 
 .player-mask-yt-cover:hover {
-  background: #151524;
+  background: #12121E;
   border-color: var(--primary);
   transform: translateY(-1px);
 }
@@ -3910,7 +3925,7 @@ body.theme-light .guidance-hint-item {
   font-size: 10.5px;
   font-weight: 800;
   color: #FFFFFF;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   white-space: nowrap;
 }
 
