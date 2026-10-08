@@ -797,79 +797,101 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
       </div>
     </div>
 
-    <!-- Tab 1: Videos Grid -->
+    <!-- Tab 1: Videos Grid (Unit-wise grouped) -->
     <div class="subject-content-section ${activeSubjectSubTab === 'videos' ? '' : 'hidden'}" id="subject-videos-panel">
       ${videoLectures.length === 0 ? `
         <div class="empty-content-box">
           <div class="empty-icon">🎥</div>
-          <h3>No video lectures uploaded yet</h3>
-          <p>This unit currently contains study materials and notes in the Notes &amp; PDFs tab.</p>
+          <h3>No video lectures in this subject</h3>
+          <p>Please check the Notes &amp; PDFs tab for study materials.</p>
         </div>
-      ` : `
-        <div class="videos-cards-grid">
-          ${videoLectures.map((lec) => `
-            <div class="video-lecture-card" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lec.id}')">
-              <div class="video-card-thumb-wrap">
-                <img src="${lec.thumbnail_url || batch.thumbnail_url || '/static/logo.png'}" alt="${lec.title}" class="video-card-thumb" onerror="this.src='/static/logo.png'">
-                <div class="video-watermark-tag">COURSE WALLAH</div>
-                <div class="video-duration-tag">⏱️ ${Math.round((lec.duration_seconds || 1500) / 60)} mins</div>
-                <div class="video-play-overlay">
-                  <div class="video-play-btn-circle">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      ` : (subject.folders || []).map(folder => {
+        const vLecs = (folder.lectures || []).filter(l => l.has_video);
+        if (vLecs.length === 0) return '';
+        return `
+          <div class="unit-section-block">
+            <div class="unit-group-header">
+              <div class="unit-folder-icon">📁</div>
+              <div class="unit-group-title">${folder.name}</div>
+              <span class="unit-lec-count">${vLecs.length} Videos</span>
+            </div>
+            <div class="videos-cards-grid">
+              ${vLecs.map(lec => `
+                <div class="video-lecture-card" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lec.id}')">
+                  <div class="video-card-thumb-wrap">
+                    <img src="${lec.thumbnail_url || batch.thumbnail_url || '/static/logo.png'}" alt="${lec.title}" class="video-card-thumb" onerror="this.src='/static/logo.png'">
+                    <div class="video-watermark-tag">COURSE WALLAH</div>
+                    <div class="video-duration-tag">⏱️ ${Math.round((lec.duration_seconds || 1500) / 60)} mins</div>
+                    <div class="video-play-overlay">
+                      <div class="video-play-btn-circle">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="video-card-body">
+                    <h3 class="video-card-title" title="${lec.title}">${lec.title}</h3>
+                    <div class="video-card-footer">
+                      <span>📅 ${lec.created_at || 'Recent'}</span>
+                      <span class="video-lec-idx">Lecture #${lec.index}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="video-card-body">
-                <h3 class="video-card-title" title="${lec.title}">${lec.title}</h3>
-                <div class="video-card-footer">
-                  <span>📅 ${lec.created_at || 'Recent'}</span>
-                  <span class="video-lec-idx">Lecture #${lec.index}</span>
-                </div>
-              </div>
+              `).join('')}
             </div>
-          `).join('')}
-        </div>
-      `}
+          </div>
+        `;
+      }).join('')}
     </div>
 
-    <!-- Tab 2: Notes & PDFs Grid -->
+    <!-- Tab 2: Notes & PDFs Grid (Unit-wise grouped) -->
     <div class="subject-content-section ${activeSubjectSubTab === 'notes' ? '' : 'hidden'}" id="subject-notes-panel">
       ${noteLectures.length === 0 ? `
         <div class="empty-content-box">
           <div class="empty-icon">📄</div>
-          <h3>No PDF notes in this unit</h3>
+          <h3>No PDF notes in this subject</h3>
           <p>Please check the Videos tab for class recordings.</p>
         </div>
-      ` : `
-        <div class="notes-cards-grid">
-          ${noteLectures.map(note => {
-            const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
-            return `
-              <div class="note-pdf-card">
-                <div class="note-card-left">
-                  <div class="note-pdf-icon-box">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      ` : (subject.folders || []).map(folder => {
+        const nLecs = (folder.lectures || []).filter(l => l.has_pdf);
+        if (nLecs.length === 0) return '';
+        return `
+          <div class="unit-section-block">
+            <div class="unit-group-header">
+              <div class="unit-folder-icon">📄</div>
+              <div class="unit-group-title">${folder.name}</div>
+              <span class="unit-lec-count">${nLecs.length} Notes</span>
+            </div>
+            <div class="notes-cards-grid">
+              ${nLecs.map(note => {
+                const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
+                return `
+                  <div class="note-pdf-card">
+                    <div class="note-card-left">
+                      <div class="note-pdf-icon-box">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                      </div>
+                      <div class="note-info-wrap">
+                        <h3 class="note-card-title">${note.title}</h3>
+                        <span class="note-card-sub">Verified Study Material &bull; PDF DPP &bull; High Definition</span>
+                      </div>
+                    </div>
+                    <div class="note-card-actions">
+                      <button class="btn-note-view" onclick="openPdfModal('${pdfUrl}', '${note.title.replace(/'/g, "\\'")}')">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span>View PDF</span>
+                      </button>
+                      <a href="${pdfUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Download</span>
+                      </a>
+                    </div>
                   </div>
-                  <div class="note-info-wrap">
-                    <h3 class="note-card-title">${note.title}</h3>
-                    <span class="note-card-sub">Verified Study Material &bull; PDF DPP &bull; High Definition</span>
-                  </div>
-                </div>
-                <div class="note-card-actions">
-                  <button class="btn-note-view" onclick="openPdfModal('${pdfUrl}', '${note.title.replace(/'/g, "\\'")}')">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    <span>View PDF</span>
-                  </button>
-                  <a href="${pdfUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    <span>Download</span>
-                  </a>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `}
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
 }
