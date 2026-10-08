@@ -557,7 +557,7 @@ function renderAppsCardsHtml(apps) {
       <div>
         <div class="app-card-header">
           <div class="app-icon-wrap">
-            <img src="${app.icon_url || '/static/logo.png'}" alt="${app.name}" class="app-icon-img" onerror="this.outerHTML='<div class=\\'brand-fallback-logo\\' style=\\'width:50px;height:50px;font-size:18px;\\'>CW</div>'">
+            <img src="${app.icon_url || '/static/logo.png'}" alt="${app.name}" class="app-icon-img" onerror="this.src='/static/logo.png'">
           </div>
           <div class="app-header-meta">
             <span class="app-tag-pill">${idx === 0 ? 'POPULAR' : 'HOT'}</span>
@@ -1085,7 +1085,7 @@ function renderDeveloperView(container) {
       <div class="dev-hero-top">
         <div class="dev-avatar-container">
           <div class="dev-avatar-glow"></div>
-          <div class="dev-avatar-box">👨‍💻</div>
+          <img src="/static/logo.png" alt="Course Wallah Official Logo" class="dev-avatar-img">
         </div>
         <div class="dev-header-info">
           <div class="dev-role-pills">
