@@ -772,6 +772,82 @@ class YouTubeAccountManager:
             }
 
     @classmethod
+    def generate_oauth_authorization_url(
+        cls,
+        client_id: str,
+        redirect_uri: str = "http://localhost"
+    ) -> str:
+        """
+        Generates official Google OAuth 2.0 consent URL with all required YouTube scopes.
+        """
+        import urllib.parse
+        params = {
+            "client_id": client_id.strip(),
+            "redirect_uri": redirect_uri.strip(),
+            "response_type": "code",
+            "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.readonly",
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true"
+        }
+        return f"https://accounts.google.com/o/oauth2/auth?{urllib.parse.urlencode(params)}"
+
+    @classmethod
+    async def exchange_oauth_code_for_tokens(
+        cls,
+        client_id: str,
+        client_secret: str,
+        code: str,
+        redirect_uri: str = "http://localhost"
+    ) -> Dict[str, Any]:
+        """
+        Exchanges authorization code for access_token and refresh_token from Google's token endpoint.
+        """
+        if not client_id or not client_secret or not code:
+            return {"valid": False, "error": "client_id, client_secret, and authorization code are all required."}
+
+        import httpx
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "client_id": client_id.strip(),
+            "client_secret": client_secret.strip(),
+            "code": code.strip(),
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri.strip()
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(token_url, data=payload)
+                if resp.status_code != 200:
+                    err_json = {}
+                    try:
+                        err_json = resp.json()
+                    except Exception:
+                        pass
+                    err_msg = err_json.get("error_description") or err_json.get("error") or resp.text
+                    return {"valid": False, "error": f"Google Token Exchange Failed (HTTP {resp.status_code}): {err_msg}"}
+
+                data = resp.json()
+                refresh_token = data.get("refresh_token")
+                access_token = data.get("access_token")
+                if not refresh_token:
+                    return {
+                        "valid": False,
+                        "error": "Google did not return a refresh_token. Please ensure you approved all YouTube permissions and re-authenticate."
+                    }
+
+                return {
+                    "valid": True,
+                    "refresh_token": refresh_token,
+                    "access_token": access_token
+                }
+        except httpx.TimeoutException:
+            return {"valid": False, "error": "Request timed out while contacting Google OAuth token endpoint."}
+        except Exception as e:
+            return {"valid": False, "error": f"Exception exchanging authorization code: {str(e)}"}
+
+    @classmethod
     async def validate_and_fetch_channel_info(
         cls,
         client_id: str,

@@ -1,7 +1,9 @@
 import os
+import re
 import time
 import logging
 import asyncio
+import urllib.parse
 from typing import Dict, Any, Optional, List
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified, RPCError
@@ -35,13 +37,15 @@ _last_batch_sessions_by_user: Dict[int, BatchWizardState] = {}
 
 # State tracking for users in interactive YouTube credential adding flow
 _yt_add_waiting_users: Dict[int, bool] = {}
+_yt_oauth_pending_sessions: Dict[int, Dict[str, Any]] = {}
 
-def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, str]]:
+def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, Any]]:
     """
     Intelligently parses YouTube OAuth credentials from:
-    1. JSON text (Google client_secret.json format or custom dict)
-    2. Pipe-separated string: "Name | CLIENT_ID | CLIENT_SECRET | REFRESH_TOKEN"
-    3. Multiline key-value string: "Client ID: ... \n Client Secret: ... \n Refresh Token: ..."
+    1. Google Cloud client_secrets.json (installed / web dict)
+    2. Custom JSON with client_id, client_secret, [refresh_token]
+    3. Pipe-separated string: "Name | CLIENT_ID | CLIENT_SECRET | [REFRESH_TOKEN]"
+    4. Multiline key-value string: "Client ID: ... \n Client Secret: ... \n Refresh Token: ..."
     """
     if not text:
         return None
@@ -56,14 +60,32 @@ def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, str]]:
             installed = data.get("installed") or data.get("web") or {}
             cid = data.get("client_id") or installed.get("client_id")
             csec = data.get("client_secret") or installed.get("client_secret")
-            rt = data.get("refresh_token") or installed.get("refresh_token")
-            name = data.get("name") or data.get("channel_name") or "YouTube Channel"
+            rt = data.get("refresh_token") or installed.get("refresh_token") or ""
+            
+            # Extract redirect URIs from Google client_secrets.json
+            redirect_uris = installed.get("redirect_uris") or data.get("redirect_uris") or []
+            redirect_uri = redirect_uris[0] if (redirect_uris and isinstance(redirect_uris, list)) else "http://localhost"
+            
+            name = (
+                data.get("name") 
+                or data.get("channel_name") 
+                or installed.get("project_id") 
+                or data.get("project_id") 
+                or "YouTube Channel"
+            )
+            
             if cid and csec:
-                return {"name": name, "client_id": cid.strip(), "client_secret": csec.strip(), "refresh_token": (rt or "").strip()}
+                return {
+                    "name": str(name).strip(),
+                    "client_id": str(cid).strip(),
+                    "client_secret": str(csec).strip(),
+                    "refresh_token": str(rt).strip(),
+                    "redirect_uri": str(redirect_uri).strip()
+                }
         except Exception:
             pass
 
-    # 2. Try pipe delimiter format: "Name | client_id | client_secret | refresh_token"
+    # 2. Try pipe delimiter format: "Name | client_id | client_secret | [refresh_token]"
     if "|" in cleaned:
         parts = [p.strip() for p in cleaned.split("|") if p.strip()]
         if len(parts) >= 4:
@@ -71,15 +93,35 @@ def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, str]]:
                 "name": parts[0],
                 "client_id": parts[1],
                 "client_secret": parts[2],
-                "refresh_token": parts[3]
+                "refresh_token": parts[3],
+                "redirect_uri": "http://localhost"
             }
         elif len(parts) == 3:
-            return {
-                "name": "YouTube Channel",
-                "client_id": parts[0],
-                "client_secret": parts[1],
-                "refresh_token": parts[2]
-            }
+            if "apps.googleusercontent.com" in parts[0] or "GOCSPX" in parts[1]:
+                return {
+                    "name": "YouTube Channel",
+                    "client_id": parts[0],
+                    "client_secret": parts[1],
+                    "refresh_token": parts[2],
+                    "redirect_uri": "http://localhost"
+                }
+            else:
+                return {
+                    "name": parts[0],
+                    "client_id": parts[1],
+                    "client_secret": parts[2],
+                    "refresh_token": "",
+                    "redirect_uri": "http://localhost"
+                }
+        elif len(parts) == 2:
+            if "apps.googleusercontent.com" in parts[0] or "GOCSPX" in parts[1]:
+                return {
+                    "name": "YouTube Channel",
+                    "client_id": parts[0],
+                    "client_secret": parts[1],
+                    "refresh_token": "",
+                    "redirect_uri": "http://localhost"
+                }
 
     # 3. Try multiline key-value format
     lines = cleaned.splitlines()
@@ -89,7 +131,7 @@ def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, str]]:
             k, v = line.split(":", 1)
             k = k.strip().lower()
             v = v.strip()
-            if "name" in k or "channel" in k or "title" in k:
+            if "name" in k or "channel" in k or "title" in k or "project" in k:
                 res["name"] = v
             elif "client_id" in k or "client id" in k or "clientid" in k:
                 res["client_id"] = v
@@ -97,12 +139,84 @@ def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, str]]:
                 res["client_secret"] = v
             elif "refresh_token" in k or "refresh token" in k or "refreshtoken" in k:
                 res["refresh_token"] = v
+            elif "redirect" in k:
+                res["redirect_uri"] = v
 
-    if "client_id" in res and "client_secret" in res and "refresh_token" in res:
+    if "client_id" in res and "client_secret" in res:
         res.setdefault("name", "YouTube Channel")
+        res.setdefault("refresh_token", "")
+        res.setdefault("redirect_uri", "http://localhost")
         return res
 
     return None
+
+def extract_oauth_code_from_input(text: str) -> Optional[str]:
+    """
+    Extracts Google OAuth 2.0 authorization code from:
+    1. Full redirect URL: http://localhost/?code=4/0AWtg...&scope=...
+    2. URL query string: ?code=4/0AWtg...
+    3. Raw authorization code: 4/0AWtg... or 4%2F0AWtg...
+    """
+    if not text:
+        return None
+    raw = text.strip()
+    
+    # 1. URL with ?code= or &code=
+    if "code=" in raw:
+        try:
+            if "?" in raw:
+                query = raw.split("?", 1)[1]
+                parsed = urllib.parse.parse_qs(query)
+                if "code" in parsed and parsed["code"]:
+                    return urllib.parse.unquote(parsed["code"][0].strip())
+        except Exception:
+            pass
+        # Regex fallback
+        m = re.search(r"[?&]code=([^&\s]+)", raw)
+        if m:
+            return urllib.parse.unquote(m.group(1)).strip()
+
+    # 2. Raw auth code: Google auth codes start with '4/' or '4%2F'
+    if raw.startswith("4/") or raw.startswith("4%2F"):
+        return urllib.parse.unquote(raw).strip()
+
+    # 3. If raw code is alphanumeric with dashes/underscores/slashes and length between 25 and 180
+    if len(raw) >= 25 and len(raw) <= 180 and not raw.startswith("http") and not raw.startswith("{") and "|" not in raw:
+        return urllib.parse.unquote(raw).strip()
+
+    return None
+
+def build_oauth_authorization_card_and_markup(parsed: Dict[str, Any]) -> Tuple[str, InlineKeyboardMarkup]:
+    """Builds interactive authorization prompt with 1-Click button and clear instructions."""
+    cid = parsed["client_id"]
+    r_uri = parsed.get("redirect_uri", "http://localhost")
+    proj_name = parsed.get("name", "Google Cloud Project")
+    auth_url = YouTubeAccountManager.generate_oauth_authorization_url(cid, r_uri)
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔐 1-Click Authorize YouTube Channel", url=auth_url)],
+        [InlineKeyboardButton("❌ Cancel", callback_data="yt:cancel_oauth")]
+    ])
+    
+    masked_cid = f"{cid[:12]}...{cid[-10:]}" if len(cid) > 24 else cid
+    
+    card = (
+        f"🔑 <b>GOOGLE OAUTH 2.0 CLIENT DETECTED!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📁 <b>Project / App:</b> <code>{proj_name}</code>\n"
+        f"🆔 <b>Client ID:</b> <code>{masked_cid}</code>\n"
+        f"🔗 <b>Redirect URI:</b> <code>{r_uri}</code>\n\n"
+        f"Follow these 3 quick steps to link your channel:\n\n"
+        f"1️⃣ <b>Click the button below</b> to grant YouTube upload permissions:\n"
+        f"👉 <a href=\"{auth_url}\"><b>Click Here to Authorize YouTube</b></a>\n\n"
+        f"2️⃣ <b>Allow Permissions:</b> Select your YouTube account and click <b>Continue / Allow</b>.\n\n"
+        f"3️⃣ <b>Paste Redirected Link / Code:</b> Google will redirect your browser to:\n"
+        f"<code>http://localhost/?code=4/0A...</code>\n"
+        f"<i>(Note: If your browser says 'Site can't be reached' or 'Unable to connect' — that is 100% normal!)</i>\n\n"
+        f"📥 <b>Copy the URL from your browser's address bar (or just the code) and paste/send it right here!</b>\n\n"
+        f"🤖 <i>Course Wallah will automatically exchange it for a Refresh Token, fetch your channel name & stats, and add it to your auto-failover pool!</i>"
+    )
+    return card, markup
 
 def is_admin(user_id: int) -> bool:
     """Strict admin check: OWNER_ID or authorized ADMINS list."""
@@ -363,6 +477,13 @@ def register_handlers(app: Client):
             parsed = parse_youtube_credentials_text(args_text) if args_text else None
 
             if parsed:
+                if not parsed.get("refresh_token"):
+                    _yt_oauth_pending_sessions[user_id] = parsed
+                    _yt_add_waiting_users[user_id] = True
+                    card, markup = build_oauth_authorization_card_and_markup(parsed)
+                    await message.reply_text(card, reply_markup=markup, disable_web_page_preview=True)
+                    return
+
                 wait_msg = await message.reply_text("⏳ <i>Testing OAuth credentials & connecting to YouTube API...</i>")
                 success, acc_dict, msg_or_err = await YouTubeAccountManager.add_account_from_credentials(
                     name=parsed["name"],
@@ -407,21 +528,22 @@ def register_handlers(app: Client):
             # Interactive Prompt Mode
             _yt_add_waiting_users[user_id] = True
             prompt_text = (
-                f"🎬 <b>ADD YOUTUBE CHANNEL CREDENTIALS (OAUTH)</b>\n"
+                f"🎬 <b>ADD YOUTUBE CHANNEL (1-CLICK OAUTH)</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"Please reply to this message with your credentials in any of the following formats:\n\n"
-                f"🔹 <b>Format 1 (Single Line / Pipe):</b>\n"
+                f"You can connect your channel in any of these easy ways:\n\n"
+                f"🔹 <b>Method 1 (Instant 1-Click Link - Recommended):</b>\n"
+                f"Send your Google Cloud <code>client_secrets.json</code> file or paste its JSON text directly.\n"
+                f"<i>Course Wallah will instantly generate a 1-Click Authorization link to generate and autosave your refresh token!</i>\n\n"
+                f"🔹 <b>Method 2 (Single Line / Pipe):</b>\n"
                 f"<code>Channel Name | CLIENT_ID | CLIENT_SECRET | REFRESH_TOKEN</code>\n\n"
-                f"🔹 <b>Format 2 (Multiline Key-Value):</b>\n"
+                f"🔹 <b>Method 3 (Multiline Key-Value):</b>\n"
                 f"<pre>\n"
                 f"Name: Backup Channel 2\n"
                 f"Client ID: xxxxx.apps.googleusercontent.com\n"
                 f"Client Secret: GOCSPX-xxxxx\n"
                 f"Refresh Token: 1//04xxxxx\n"
                 f"</pre>\n\n"
-                f"🔹 <b>Format 3 (JSON Document / Text):</b>\n"
-                f"Send your <code>client_secrets.json</code> file or paste the JSON text directly.\n\n"
-                f"<i>Bot will automatically test the token, fetch your YouTube Channel name, and add it to the auto-failover pool!</i>"
+                f"👉 <i>Simply upload your <code>.json</code> file or paste your credentials here!</i>"
             )
             markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel", callback_data="admin:youtube_accounts")]
@@ -1047,12 +1169,10 @@ def register_handlers(app: Client):
                 if parsed and parsed.get("client_id") and parsed.get("client_secret"):
                     # Check if refresh token is present in JSON
                     if not parsed.get("refresh_token"):
+                        _yt_oauth_pending_sessions[user_id] = parsed
                         _yt_add_waiting_users[user_id] = True
-                        await status_msg.edit_text(
-                            f"⚠️ <b>Client ID & Secret Detected from JSON:</b>\n\n"
-                            f"• Client ID: <code>{parsed['client_id'][:12]}...</code>\n\n"
-                            f"👉 <b>Please reply with your REFRESH_TOKEN</b> to finish linking this YouTube channel!"
-                        )
+                        card, markup = build_oauth_authorization_card_and_markup(parsed)
+                        await status_msg.edit_text(card, reply_markup=markup, disable_web_page_preview=True)
                         return
 
                     success, acc_dict, msg_or_err = await YouTubeAccountManager.add_account_from_credentials(
@@ -1165,21 +1285,48 @@ def register_handlers(app: Client):
 
         text = message.text.strip()
 
-        # 1. Check if user is in interactive YouTube credential input mode
-        if _yt_add_waiting_users.get(user_id):
-            parsed = parse_youtube_credentials_text(text)
-            if parsed:
-                _yt_add_waiting_users.pop(user_id, None)
-                wait_msg = await message.reply_text("⏳ <i>Testing OAuth credentials with Google & fetching Channel info...</i>")
+        # 1. Check if user is in an active 1-Click Google OAuth flow waiting for auth code or redirect URL
+        if user_id in _yt_oauth_pending_sessions:
+            sess = _yt_oauth_pending_sessions[user_id]
+            code = extract_oauth_code_from_input(text)
+            if code:
+                wait_msg = await message.reply_text("⏳ <i>Exchanging authorization code with Google OAuth & fetching Channel details...</i>")
+                token_res = await YouTubeAccountManager.exchange_oauth_code_for_tokens(
+                    client_id=sess["client_id"],
+                    client_secret=sess["client_secret"],
+                    code=code,
+                    redirect_uri=sess.get("redirect_uri", "http://localhost")
+                )
+                if not token_res.get("valid"):
+                    auth_url = YouTubeAccountManager.generate_oauth_authorization_url(
+                        sess["client_id"],
+                        sess.get("redirect_uri", "http://localhost")
+                    )
+                    markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Re-Authorize (Get New Code)", url=auth_url)],
+                        [InlineKeyboardButton("❌ Cancel", callback_data="yt:cancel_oauth")]
+                    ])
+                    await wait_msg.edit_text(
+                        f"❌ <b>OAuth Exchange Failed:</b>\n\n"
+                        f"<code>{token_res.get('error', 'Unknown token exchange error')}</code>\n\n"
+                        f"<i>Note: Authorization codes expire within minutes or can only be used once. Please click above to get a fresh code and try again.</i>",
+                        reply_markup=markup,
+                        disable_web_page_preview=True
+                    )
+                    return
+
+                refresh_token = token_res["refresh_token"]
                 success, acc_dict, msg_or_err = await YouTubeAccountManager.add_account_from_credentials(
-                    name=parsed["name"],
-                    client_id=parsed["client_id"],
-                    client_secret=parsed["client_secret"],
-                    refresh_token=parsed["refresh_token"],
+                    name=sess.get("name", "YouTube Channel"),
+                    client_id=sess["client_id"],
+                    client_secret=sess["client_secret"],
+                    refresh_token=refresh_token,
                     priority=2,
                     auto_test=True
                 )
                 if success:
+                    _yt_oauth_pending_sessions.pop(user_id, None)
+                    _yt_add_waiting_users.pop(user_id, None)
                     ch_title = acc_dict.get("channel_title") or acc_dict.get("name")
                     ch_id = acc_dict.get("channel_id")
                     markup = InlineKeyboardMarkup([
@@ -1194,7 +1341,8 @@ def register_handlers(app: Client):
                         f"🆔 <b>Channel ID:</b> <code>{ch_id or 'Detected'}</code>\n"
                         f"⭐ <b>Priority:</b> #{acc_dict.get('priority', 2)}\n"
                         f"🟢 <b>Status:</b> ACTIVE\n"
-                        f"🎯 <b>Daily Quota:</b> ~20 videos/day\n\n"
+                        f"🎯 <b>Daily Quota:</b> ~20 videos/day\n"
+                        f"🔑 <b>Refresh Token:</b> <code>{refresh_token[:8]}...{refresh_token[-6:]}</code> (Autosaved to DB!)\n\n"
                         f"🛡️ <b>Multi-Channel Pool:</b> This channel is now active. When another channel hits the daily upload limit, the bot rotates to this channel automatically!",
                         reply_markup=markup
                     )
@@ -1204,23 +1352,74 @@ def register_handlers(app: Client):
                         [InlineKeyboardButton("❌ Cancel", callback_data="admin:youtube_accounts")]
                     ])
                     await wait_msg.edit_text(
-                        f"❌ <b>OAuth Verification Failed:</b>\n\n"
+                        f"❌ <b>Channel Verification Failed:</b>\n\n"
                         f"<code>{msg_or_err}</code>\n\n"
-                        f"<i>Please verify your Client ID, Client Secret, and Refresh Token.</i>",
+                        f"<i>Please verify your Google OAuth consent screen & YouTube permissions.</i>",
                         reply_markup=markup
                     )
                 return
+
+        # 2. Check if user sent JSON or credentials directly (or is in _yt_add_waiting_users)
+        parsed = parse_youtube_credentials_text(text)
+        if parsed and parsed.get("client_id") and parsed.get("client_secret"):
+            if not parsed.get("refresh_token"):
+                _yt_oauth_pending_sessions[user_id] = parsed
+                _yt_add_waiting_users[user_id] = True
+                card, markup = build_oauth_authorization_card_and_markup(parsed)
+                await message.reply_text(card, reply_markup=markup, disable_web_page_preview=True)
+                return
+
+            _yt_add_waiting_users.pop(user_id, None)
+            _yt_oauth_pending_sessions.pop(user_id, None)
+            wait_msg = await message.reply_text("⏳ <i>Testing OAuth credentials with Google & fetching Channel info...</i>")
+            success, acc_dict, msg_or_err = await YouTubeAccountManager.add_account_from_credentials(
+                name=parsed["name"],
+                client_id=parsed["client_id"],
+                client_secret=parsed["client_secret"],
+                refresh_token=parsed["refresh_token"],
+                priority=2,
+                auto_test=True
+            )
+            if success:
+                ch_title = acc_dict.get("channel_title") or acc_dict.get("name")
+                ch_id = acc_dict.get("channel_id")
+                markup = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("🎬 View All Accounts", callback_data="admin:youtube_accounts"),
+                        InlineKeyboardButton("➕ Add Another", callback_data="yt:add_prompt")
+                    ]
+                ])
+                await wait_msg.edit_text(
+                    f"🎉 <b>YOUTUBE CHANNEL LINKED SUCCESSFULLY!</b>\n\n"
+                    f"📺 <b>Channel:</b> <b>{ch_title}</b>\n"
+                    f"🆔 <b>Channel ID:</b> <code>{ch_id or 'Detected'}</code>\n"
+                    f"⭐ <b>Priority:</b> #{acc_dict.get('priority', 2)}\n"
+                    f"🟢 <b>Status:</b> ACTIVE\n"
+                    f"🎯 <b>Daily Quota:</b> ~20 videos/day\n\n"
+                    f"🛡️ <b>Multi-Channel Pool:</b> This channel is now active. When another channel hits the daily upload limit, the bot rotates to this channel automatically!",
+                    reply_markup=markup
+                )
             else:
-                if "client" in text.lower() or "|" in text or "apps.googleusercontent" in text or "1//" in text:
-                    await message.reply_text(
-                        "⚠️ <b>Incomplete Credentials Format.</b>\n\n"
-                        "Please provide all 3 required parameters:\n"
-                        "• Client ID\n"
-                        "• Client Secret\n"
-                        "• Refresh Token\n\n"
-                        "<i>Example:</i> <code>My Channel | client_id.apps.googleusercontent.com | GOCSPX-secret | 1//refresh_token</code>"
-                    )
-                    return
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Try Again", callback_data="yt:add_prompt")],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="admin:youtube_accounts")]
+                ])
+                await wait_msg.edit_text(
+                    f"❌ <b>OAuth Verification Failed:</b>\n\n"
+                    f"<code>{msg_or_err}</code>\n\n"
+                    f"<i>Please verify your Client ID, Client Secret, and Refresh Token.</i>",
+                    reply_markup=markup
+                )
+            return
+
+        if _yt_add_waiting_users.get(user_id):
+            if "client" in text.lower() or "|" in text or "apps.googleusercontent" in text or "1//" in text:
+                await message.reply_text(
+                    "⚠️ <b>Incomplete Credentials Format.</b>\n\n"
+                    "You can simply send or paste your Google Cloud <code>client_secrets.json</code> file, and the bot will generate an instant 1-Click authorization link for you!\n\n"
+                    "Or provide: <code>Channel Name | CLIENT_ID | CLIENT_SECRET | REFRESH_TOKEN</code>"
+                )
+                return
 
         state = BatchWizardManager.get_session(processing_engine.bot_id, user_id)
         if not state or not state.text_input_prompt:
@@ -1400,26 +1599,37 @@ def register_handlers(app: Client):
                 await callback.answer()
                 _yt_add_waiting_users[user_id] = True
                 prompt_text = (
-                    f"🎬 <b>ADD YOUTUBE CHANNEL CREDENTIALS (OAUTH)</b>\n"
+                    f"🎬 <b>ADD YOUTUBE CHANNEL (1-CLICK OAUTH)</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"Please reply to this message with your credentials in any of the following formats:\n\n"
-                    f"🔹 <b>Format 1 (Single Line / Pipe):</b>\n"
+                    f"You can connect your channel in any of these easy ways:\n\n"
+                    f"🔹 <b>Method 1 (Instant 1-Click Link - Recommended):</b>\n"
+                    f"Send your Google Cloud <code>client_secrets.json</code> file or paste its JSON text directly.\n"
+                    f"<i>Course Wallah will instantly generate a 1-Click Authorization link to generate and autosave your refresh token!</i>\n\n"
+                    f"🔹 <b>Method 2 (Single Line / Pipe):</b>\n"
                     f"<code>Channel Name | CLIENT_ID | CLIENT_SECRET | REFRESH_TOKEN</code>\n\n"
-                    f"🔹 <b>Format 2 (Multiline Key-Value):</b>\n"
+                    f"🔹 <b>Method 3 (Multiline Key-Value):</b>\n"
                     f"<pre>\n"
                     f"Name: Backup Channel 2\n"
                     f"Client ID: xxxxx.apps.googleusercontent.com\n"
                     f"Client Secret: GOCSPX-xxxxx\n"
                     f"Refresh Token: 1//04xxxxx\n"
                     f"</pre>\n\n"
-                    f"🔹 <b>Format 3 (JSON Document / Text):</b>\n"
-                    f"Send your <code>client_secrets.json</code> file or paste the JSON text directly.\n\n"
-                    f"<i>Bot will automatically test the token, fetch your YouTube Channel name, and add it to the auto-failover pool!</i>"
+                    f"👉 <i>Simply upload your <code>.json</code> file or paste your credentials here!</i>"
                 )
                 markup = InlineKeyboardMarkup([
                     [InlineKeyboardButton("❌ Cancel", callback_data="admin:youtube_accounts")]
                 ])
                 await callback.message.edit_text(prompt_text, reply_markup=markup)
+                return
+
+            if data == "yt:cancel_oauth":
+                await callback.answer("OAuth linking cancelled.")
+                _yt_oauth_pending_sessions.pop(user_id, None)
+                _yt_add_waiting_users.pop(user_id, None)
+                diag = await YouTubeAccountManager.get_diagnostics()
+                text = TelegramProgressUI.render_youtube_accounts_screen(diag)
+                buttons = TelegramProgressUI.build_youtube_accounts_markup(diag.get("accounts", []))
+                await callback.message.edit_text(text, reply_markup=buttons, disable_web_page_preview=True)
                 return
 
             if data.startswith("yt:view:"):
