@@ -1,0 +1,9 @@
+from .apps import router as apps_router
+from .batches import router as batches_router
+from .lectures import router as lectures_router
+from .pdfs import router as pdfs_router
+from .search import router as search_router
+from .admin import router as admin_router
+from .auth import router as auth_router
+from .ai import router as ai_router
+from .contact import router as contact_router

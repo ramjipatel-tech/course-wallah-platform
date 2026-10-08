@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Course Wallah — Premium Learning Platform</title>
+  <meta name="description" content="Course Wallah Content Platform: High-quality engineering & academic courses, structured video lectures, and private PDF study material.">
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- PDF.js from Cloudflare CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/index.css">
+</head>
+<body class="dark-theme">
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-container">
+      <div class="nav-brand" onclick="navigateTo('home')">
+        <img src="/static/logo.png" alt="Course Wallah" class="nav-logo" onerror="this.style.display='none'">
+        <div class="brand-text">
+          <span class="brand-title">COURSE WALLAH</span>
+          <span class="brand-tag">LEARNING PORTAL</span>
+        </div>
+      </div>
+
+      <!-- Global Search -->
+      <div class="nav-search-wrapper">
+        <div class="search-input-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="global-search-input" placeholder="Search apps, batches, subjects, lectures..." autocomplete="off">
+          <kbd class="search-shortcut">⌘K</kbd>
+        </div>
+        <!-- Search Results Dropdown -->
+        <div id="search-results-dropdown" class="search-dropdown hidden"></div>
+      </div>
+
+      <!-- Navigation Actions -->
+      <div class="nav-actions">
+        <button class="nav-btn" onclick="navigateTo('home')">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+          <span>Explore Apps</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Global Breadcrumbs -->
+  <div id="breadcrumb-bar" class="breadcrumb-bar hidden">
+    <div class="breadcrumb-container" id="breadcrumb-items"></div>
+  </div>
+
+  <!-- Main View Container -->
+  <main class="main-container" id="app-root">
+    <!-- Rendered dynamically by app.js -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <img src="/static/logo.png" alt="Course Wallah Logo" class="footer-logo">
+        <p>Your learning, organized. High-speed video lectures & verified study notes.</p>
+      </div>
+      <div class="footer-meta">
+        <div class="footer-links">
+          <a href="#/apps">All Streams</a>
+          <a href="https://t.me/course_wallah_officalbot" target="_blank">Telegram Bot</a>
+        </div>
+        <p class="footer-copy">© 2026 Course Wallah Content Platform. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <!-- Main Application Script -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
