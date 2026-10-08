@@ -11,18 +11,42 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, urlunparse
 from typing import Optional, Dict, Any, Tuple, Union, List
 
-# Ensure parent root directory (B:\Projects\downloader bot) is in sys.path
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+# Platform root directory
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
-# Import original proven root modules (READ-ONLY REFERENCE)
-import itsgolu as original_helper
-import spayee_downloader as original_spayee
-import kgs_downloader as original_kgs
-import youtube_fallback as original_yt_fallback
-import pdf_unlocker as original_pdf_unlocker
-from utils import parse_pdf_input
+# Import original root modules with graceful fallbacks for standalone cloud/container deployment
+try:
+    import itsgolu as original_helper
+except ImportError:
+    original_helper = None
+
+try:
+    import spayee_downloader as original_spayee
+except ImportError:
+    from providers import spayee as original_spayee
+
+try:
+    import kgs_downloader as original_kgs
+except ImportError:
+    original_kgs = None
+
+try:
+    import youtube_fallback as original_yt_fallback
+except ImportError:
+    from providers import youtube_fallback as original_yt_fallback
+
+try:
+    import pdf_unlocker as original_pdf_unlocker
+except ImportError:
+    from providers import pdf_unlocker as original_pdf_unlocker
+
+try:
+    from utils import parse_pdf_input
+except ImportError:
+    def parse_pdf_input(url: str, title: str = ""):
+        return {"url": url, "title": title}
 
 from providers.router import MediaRouter, MediaType
 
