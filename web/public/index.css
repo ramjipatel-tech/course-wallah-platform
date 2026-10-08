@@ -3783,14 +3783,126 @@ body.theme-light .guidance-hint-item {
   overflow: hidden !important;
 }
 
-/* Crop & scale YouTube iframe so top header, channel info, and bottom-right watermark are pushed outside viewport */
+/* 100% Full Uncropped Video Display (Zero crop, zero board/slide cut-off) */
 .as-video-inner-wrap .plyr__video-embed iframe,
 .as-video-inner-wrap iframe {
   width: 100% !important;
   height: 100% !important;
   border: none !important;
-  transform: scale(1.16) !important;
+  transform: none !important;
   transform-origin: center center !important;
+}
+
+/* Sleek Corner Brand Masks (Cleanly covers YouTube icons with Course Wallah badges) */
+.player-mask-top-left {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 15, 24, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 12;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.player-mask-top-left:hover {
+  transform: scale(1.03);
+  background: rgba(22, 22, 34, 0.95);
+}
+
+.player-mask-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.player-mask-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: 0.5px;
+}
+
+.player-mask-top-right {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 15, 24, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 12;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.player-mask-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+.player-mask-hd-tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #38BDF8;
+  letter-spacing: 0.4px;
+}
+
+.player-mask-bottom-right {
+  position: absolute;
+  bottom: 56px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(15, 15, 24, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 12;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.2s ease;
+}
+
+.player-mask-bottom-right:hover {
+  transform: scale(1.08);
+}
+
+.player-mask-mini-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 /* Big center play button styling */

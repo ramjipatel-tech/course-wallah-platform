@@ -980,6 +980,21 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span>Preparing high-speed video stream...</span>
             </div>
           `}
+
+          <!-- Sleek Course Wallah Corner Brand Masks (Hides YouTube icons without cutting video) -->
+          <div class="player-mask-top-left" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
+            <img src="/static/logo.png" alt="Course Wallah" class="player-mask-logo">
+            <span class="player-mask-title">COURSE WALLAH</span>
+          </div>
+
+          <div class="player-mask-top-right" onclick="togglePlayerPlayback()" title="High Definition Stream Active">
+            <span class="player-mask-live-dot"></span>
+            <span class="player-mask-hd-tag">ULTRA HD 1080p</span>
+          </div>
+
+          <div class="player-mask-bottom-right" onclick="togglePlayerPlayback()" title="Course Wallah Platform">
+            <img src="/static/logo.png" alt="CW" class="player-mask-mini-logo">
+          </div>
         </div>
       </div>
 
@@ -1057,6 +1072,14 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   setTimeout(() => {
     initPlyr();
   }, 100);
+}
+
+function togglePlayerPlayback() {
+  if (currentPlyrPlayer) {
+    try {
+      currentPlyrPlayer.togglePlay();
+    } catch(e) {}
+  }
 }
 
 function setPlayerQuality(qualityStr) {
