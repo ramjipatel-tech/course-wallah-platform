@@ -896,7 +896,9 @@ function switchSubjectSubTab(tab) {
   }
 }
 
-// 6. IN-APP CINEMA VIDEO PLAYER VIEW (...#playing)
+// 6. IN-APP CINEMA VIDEO PLAYER VIEW (AS MULTIVERSE EXACT DESIGN)
+let currentPlyrPlayer = null;
+
 async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectIdOrSlug, lectureId) {
   const lecture = await fetchLectureDetails(lectureId);
   const access = await fetchLectureAccess(lectureId);
@@ -906,23 +908,53 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
-    <div class="player-top-nav-bar">
+    <div class="batch-detail-header-row" style="margin-bottom: 20px;">
       <button class="btn-sub-back" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}')">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        <span>Back to Subject</span>
+        <span>Back</span>
       </button>
-      <div class="player-nav-crumbs">
-        <span>${lecture.batch_name || 'Batch'}</span> &bull; <span>${lecture.subject_name || 'Subject'}</span>
-      </div>
     </div>
 
-    <div class="player-studio-layout">
+    <!-- Main AS Multiverse Player Card -->
+    <div class="as-player-card">
       
-      <!-- Main Column: Video Player & Details -->
-      <div class="player-main-column">
-        <div class="video-frame-container" id="player-container">
+      <!-- Top App Header Row (Screenshot Match) -->
+      <div class="as-player-header-row">
+        <div class="as-player-app-left">
+          <img src="/static/logo.png" alt="App Logo" class="as-player-app-avatar" onerror="this.src='/static/logo.png'">
+          <div class="as-player-app-meta">
+            <h2 class="as-player-app-name">${lecture.batch_name || 'Course Wallah'}</h2>
+            <span class="as-player-app-secure">● SECURE CLIENT SESSION ACTIVE</span>
+          </div>
+        </div>
+        <button class="btn-show-announcement" onclick="showAnnouncementModal('${escapeHtml(lecture.batch_name || 'Batch Updates')}')">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>Show Announcement</span>
+        </button>
+      </div>
+
+      <!-- Video Meta Details -->
+      <div class="as-player-meta-wrap">
+        <div class="as-player-subtag">
+          <span class="subtag-pill">VIDEO LECTURE</span>
+          <span class="subtag-dot">•</span>
+          <span class="subtag-playing">NOW PLAYING</span>
+        </div>
+        <h1 class="as-player-title">${lecture.title}</h1>
+      </div>
+
+      <!-- Sleek Tablet / TV Display Bezel Frame (Screenshot Match) -->
+      <div class="as-video-tablet-frame">
+        <div class="as-video-inner-wrap" id="player-container">
           ${access.youtube_video_id ? `
-            <iframe class="video-iframe" src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?autoplay=1&modestbranding=1&rel=0&iv_load_policy=3&controls=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+            <div class="plyr__video-embed" id="cw-plyr-element">
+              <iframe
+                src="https://www.youtube-nocookie.com/embed/${access.youtube_video_id}?origin=${window.location.origin}&iv_load_policy=3&modestbranding=1&playsinline=1&showinfo=0&rel=0&enablejsapi=1"
+                allowfullscreen
+                allowtransparency
+                allow="autoplay"
+              ></iframe>
+            </div>
           ` : `
             <div class="video-placeholder-box">
               <div class="spinner"></div>
@@ -931,89 +963,106 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
           `}
           <div class="security-watermark-overlay">COURSE WALLAH &bull; CW-ID-${lectureId.slice(0,6)}</div>
         </div>
+      </div>
 
-        <!-- Controls Bar -->
-        <div class="player-controls-bar">
-          <div class="speed-buttons-group">
-            <span class="speed-label">SPEED:</span>
-            ${['0.75x', '1x', '1.25x', '1.5x', '2x'].map(spd => `
-              <button class="btn-speed-pill ${spd === '1x' ? 'active' : ''}" onclick="setPlaybackSpeed('${spd}', this)">${spd}</button>
+      <!-- Attached Notes & DPP Banner (if exists) -->
+      ${access.pdf_download_url ? `
+        <div class="player-attached-note-banner" style="margin-top: 24px;">
+          <div class="attached-note-left">
+            <div class="note-icon-glow">📄</div>
+            <div>
+              <h4 class="attached-note-title">Companion Class Notes &amp; DPP</h4>
+              <span class="attached-note-sub">Official verified study material for this lecture</span>
+            </div>
+          </div>
+          <div class="attached-note-actions">
+            <button class="btn-attached-view" onclick="openPdfModal('${access.pdf_download_url}', '${lecture.title.replace(/'/g, "\\'")}')">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Read Notes</span>
+            </button>
+            <a href="${access.pdf_download_url}" target="_blank" download class="btn-attached-download">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download PDF</span>
+            </a>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Sibling Prev / Next Navigation -->
+      <div class="player-prev-next-row" style="margin-top: 24px;">
+        ${lecture.prev_lecture ? `
+          <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.prev_lecture.id}')">
+            <span>&larr; Previous: #${lecture.prev_lecture.index} ${lecture.prev_lecture.title}</span>
+          </button>
+        ` : '<div></div>'}
+        ${lecture.next_lecture ? `
+          <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.next_lecture.id}')">
+            <span>Next: #${lecture.next_lecture.index} ${lecture.next_lecture.title} &rarr;</span>
+          </button>
+        ` : '<div></div>'}
+      </div>
+
+      <!-- Other Lectures in this Unit -->
+      ${videoPlaylist.length > 1 ? `
+        <div class="player-unit-lectures-section">
+          <h3 class="unit-lectures-heading">Other Lectures in this Unit (${videoPlaylist.length})</h3>
+          <div class="unit-lectures-chips-grid">
+            ${videoPlaylist.map(item => `
+              <div class="unit-lec-chip ${item.id === lectureId ? 'active' : ''}" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${item.id}')">
+                <span class="chip-idx">#${String(item.index || 1).padStart(2, '0')}</span>
+                <span class="chip-title">${item.title}</span>
+                ${item.id === lectureId ? '<span class="chip-badge">PLAYING</span>' : ''}
+              </div>
             `).join('')}
           </div>
-          <div class="player-action-btns">
-            <button class="btn-save-lecture" onclick="toggleBookmark('${lecture.id}', '${lecture.title}')">
-              <span>🔖 Save</span>
-            </button>
-          </div>
         </div>
-
-        <!-- Lecture Details & Attached Notes -->
-        <div class="player-lecture-details">
-          <div class="player-lecture-header-row">
-            <div>
-              <span class="player-lec-num-pill">LECTURE #${lecture.index}</span>
-              <h1 class="player-lecture-title">${lecture.title}</h1>
-            </div>
-          </div>
-
-          ${access.pdf_download_url ? `
-            <div class="player-attached-note-banner">
-              <div class="attached-note-left">
-                <div class="note-icon-glow">📄</div>
-                <div>
-                  <h4 class="attached-note-title">Companion Class Notes &amp; DPP</h4>
-                  <span class="attached-note-sub">Official verified study material for this lecture</span>
-                </div>
-              </div>
-              <div class="attached-note-actions">
-                <button class="btn-attached-view" onclick="openPdfModal('${access.pdf_download_url}', '${lecture.title.replace(/'/g, "\\'")}')">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  <span>Read Notes</span>
-                </button>
-                <a href="${access.pdf_download_url}" target="_blank" download class="btn-attached-download">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  <span>Download PDF</span>
-                </a>
-              </div>
-            </div>
-          ` : ''}
-
-          <!-- Previous / Next Sibling Navigation -->
-          <div class="player-prev-next-row">
-            ${lecture.prev_lecture ? `
-              <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.prev_lecture.id}')">
-                <span>&larr; Previous: #${lecture.prev_lecture.index} ${lecture.prev_lecture.title}</span>
-              </button>
-            ` : '<div></div>'}
-            ${lecture.next_lecture ? `
-              <button class="btn-nav-lecture" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${lecture.next_lecture.id}')">
-                <span>Next: #${lecture.next_lecture.index} ${lecture.next_lecture.title} &rarr;</span>
-              </button>
-            ` : '<div></div>'}
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Column: Video Lectures List ONLY -->
-      <div class="player-sidebar-drawer">
-        <div class="drawer-header-title">
-          <span>Lectures in Unit</span>
-          <span class="drawer-count-badge">${videoPlaylist.length}</span>
-        </div>
-
-        <div class="drawer-scroll-body">
-          ${videoPlaylist.map(item => `
-            <div class="playlist-item-card ${item.id === lectureId ? 'active' : ''}" onclick="navigateToLecture('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}', '${item.id}')">
-              <span class="playlist-lec-num">#${String(item.index || 1).padStart(2, '0')}</span>
-              <span class="playlist-item-title">${item.title}</span>
-              ${item.id === lectureId ? '<span class="playlist-playing-tag">PLAYING</span>' : ''}
-            </div>
-          `).join('')}
-        </div>
-      </div>
+      ` : ''}
 
     </div>
   `;
+
+  // Initialize Plyr instance
+  setTimeout(() => {
+    initPlyr();
+  }, 100);
+}
+
+function initPlyr() {
+  if (currentPlyrPlayer) {
+    try { currentPlyrPlayer.destroy(); } catch(e) {}
+    currentPlyrPlayer = null;
+  }
+  const el = document.getElementById('cw-plyr-element');
+  if (el && typeof Plyr !== 'undefined') {
+    try {
+      currentPlyrPlayer = new Plyr(el, {
+        controls: [
+          'play-large',
+          'play',
+          'rewind',
+          'fast-forward',
+          'progress',
+          'current-time',
+          'duration',
+          'mute',
+          'volume',
+          'settings',
+          'pip',
+          'fullscreen'
+        ],
+        seekTime: 10,
+        settings: ['speed', 'quality'],
+        speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+        tooltips: { controls: true, seek: true }
+      });
+    } catch (e) {
+      console.debug('Plyr initialization fallback:', e);
+    }
+  }
+}
+
+function showAnnouncementModal(batchName) {
+  showToast(`📢 ${batchName}: All classes and DPP notes are synced and verified in high definition!`);
 }
 
 // IN-APP PDF READER MODAL (PDF.js Canvas Renderer)
