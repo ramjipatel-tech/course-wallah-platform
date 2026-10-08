@@ -517,6 +517,28 @@ async function renderHomeView(container) {
           <button class="category-chip ${state.activeCategory === cat ? 'active' : ''}" onclick="filterCategory('${cat}')">${cat}</button>
         `).join('')}
       </div>
+    <!-- Nexora Developer Spotlight Banner -->
+    <div style="background: linear-gradient(135deg, rgba(99,102,241,0.14) 0%, rgba(139,92,246,0.18) 100%); border:1px solid rgba(139,92,246,0.35); border-radius:24px; padding:24px 28px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+      <div style="display:flex; align-items:center; gap:18px;">
+        <div style="width:52px; height:52px; border-radius:16px; background:linear-gradient(135deg, #1E1B4B, #311042); border:1.5px solid rgba(139,92,246,0.5); display:flex; align-items:center; justify-content:center; font-size:24px; box-shadow:0 4px 16px rgba(139,92,246,0.3);">
+          ⚡
+        </div>
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <h3 style="font-size:16px; font-weight:900; color:#FFFFFF;">Architected & Engineered by Nexora</h3>
+            <span style="font-size:10px; font-weight:800; background:rgba(16,185,129,0.15); color:#10B981; padding:2px 8px; border-radius:6px;">PRO ARCHITECT</span>
+          </div>
+          <p style="font-size:13px; color:var(--text-secondary); margin-top:2px;">Software Developer • Technology Builder • Entrepreneur • AI & Cloud Systems</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button onclick="navigateToTab('developer')" class="btn-hero-primary" style="padding:8px 18px; font-size:12px; background:linear-gradient(135deg, #6366F1, #8B5CF6);">
+          <span>Meet the Developer</span>
+        </button>
+        <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-hero-secondary" style="padding:8px 16px; font-size:12px;">
+          <span>Contact Bot</span>
+        </a>
+      </div>
     </div>
 
     <!-- Popular Apps Grid -->
@@ -535,12 +557,12 @@ function renderAppsCardsHtml(apps) {
       <div>
         <div class="app-card-header">
           <div class="app-icon-wrap">
-            <img src="${app.icon_url || '/static/logo.png'}" alt="${app.name}" class="app-icon-img" onerror="this.src='/static/logo.png'">
+            <img src="${app.icon_url || '/static/logo.png'}" alt="${app.name}" class="app-icon-img" onerror="this.outerHTML='<div class=\\'brand-fallback-logo\\' style=\\'width:50px;height:50px;font-size:18px;\\'>CW</div>'">
           </div>
           <div class="app-header-meta">
             <span class="app-tag-pill">${idx === 0 ? 'POPULAR' : 'HOT'}</span>
             <h3 class="app-title" title="${app.name}">${app.name}</h3>
-            <span class="app-dev-name">DEVELOPER: MadXABhi / CW</span>
+            <span class="app-dev-name">ARCHITECT: Nexora / CW</span>
           </div>
         </div>
 
@@ -553,7 +575,7 @@ function renderAppsCardsHtml(apps) {
       <div>
         <div class="app-stats-row">
           <span class="app-download-count">👥 1,00,000+ Downloads</span>
-          <span class="app-rating-badge">★ 4.8</span>
+          <span class="app-rating-badge">★ 4.9</span>
         </div>
 
         <div class="app-actions-row">
@@ -605,14 +627,14 @@ async function renderAppDetailView(container, appSlugOrId) {
       </button>
     </div>
 
-    <!-- Promo Discord Banner -->
+    <!-- Promo Channel Banner -->
     <div class="promo-banner">
       <div>
         <span class="promo-tag">OFFICIAL ANNOUNCEMENT</span>
-        <h2 class="promo-title">Join Discord & Telegram Community</h2>
+        <h2 class="promo-title">Join Official Telegram Channel & Bot</h2>
         <p style="font-size:13px; opacity:0.9;">Get instant class alerts, DPP solutions, notes, and doubt sessions.</p>
       </div>
-      <a href="https://t.me/course_mallah_bot" target="_blank" class="btn-promo-action">Join Discord Now</a>
+      <a href="https://t.me/coursewallahoffical1" target="_blank" class="btn-promo-action">Join Channel (t.me/coursewallahoffical1)</a>
     </div>
 
     <!-- Batches Tabs -->
@@ -859,53 +881,53 @@ function setPlaybackSpeed(speedStr, btnEl) {
 function renderCommunityView(container) {
   container.innerHTML = `
     <div class="section-header-row" style="margin-bottom: 24px;">
-      <h1 class="section-heading" style="font-size: 28px;">Social Media & Community Matrix</h1>
-      <p class="section-subheading">Join thousands of students and educators across official channels.</p>
+      <h1 class="section-heading" style="font-size: 28px;">Social Media & Official Community Matrix</h1>
+      <p class="section-subheading">Join thousands of students and learners across verified official channels.</p>
     </div>
 
     <div class="cards-grid-2col">
       <div class="social-card">
         <div class="social-card-left">
-          <div class="social-icon-box" style="background:#229ED9; color:#FFF;">✈️</div>
+          <div class="social-icon-box" style="background:#229ED9; color:#FFF;">🤖</div>
           <div>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Telegram Channel</h3>
-            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">1,20,000+ Members • Instant Alerts</span>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Course Wallah Official Bot</h3>
+            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">@course_wallah_official_bot • 24/7 Batch Downloader & Ingestion</span>
           </div>
         </div>
-        <a href="https://t.me/course_mallah_bot" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px;">Join Channel</a>
+        <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#229ED9;">Open Bot</a>
       </div>
 
       <div class="social-card">
         <div class="social-card-left">
-          <div class="social-icon-box" style="background:#5865F2; color:#FFF;">💬</div>
+          <div class="social-icon-box" style="background: linear-gradient(135deg, #0284C7, #06B6D4); color:#FFF;">📢</div>
           <div>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Discord Community</h3>
-            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Coding & Doubt Solving Hub</span>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Official Telegram Channel</h3>
+            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">t.me/coursewallahoffical1 • Daily Batch Updates & Alerts</span>
           </div>
         </div>
-        <a href="https://t.me/course_mallah_bot" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#5865F2;">Join Discord</a>
+        <a href="https://t.me/coursewallahoffical1" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background: linear-gradient(135deg, #0284C7, #06B6D4);">Join Channel</a>
       </div>
 
       <div class="social-card">
         <div class="social-card-left">
-          <div class="social-icon-box" style="background:#25D366; color:#FFF;">📱</div>
+          <div class="social-icon-box" style="background:#8B5CF6; color:#FFF;">👨‍💻</div>
           <div>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">WhatsApp Channel</h3>
-            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Daily Study Material Updates</span>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Developer Hub & Support</h3>
+            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Built by Nexora • Architecture & Engineering</span>
           </div>
         </div>
-        <a href="https://t.me/course_mallah_bot" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#25D366;">Join WhatsApp</a>
+        <button onclick="navigateToTab('developer')" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#8B5CF6;">Meet Nexora</button>
       </div>
 
       <div class="social-card">
         <div class="social-card-left">
-          <div class="social-icon-box" style="background:#FF0000; color:#FFF;">📺</div>
+          <div class="social-icon-box" style="background:#10B981; color:#FFF;">⚡</div>
           <div>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">YouTube Channel</h3>
-            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Lectures & Video Solutions</span>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-primary);">Global Edge Mirror Network</h3>
+            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Ultra-low latency streaming for all students</span>
           </div>
         </div>
-        <a href="https://youtube.com" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#FF0000;">Subscribe</a>
+        <button onclick="navigateToTab('downloads')" class="btn-hero-primary" style="padding:8px 18px; font-size:13px; background:#10B981;">Test Network</button>
       </div>
     </div>
   `;
@@ -946,10 +968,10 @@ function runSpeedTest() {
   if (status) {
     status.innerText = '● Testing latency...';
     setTimeout(() => {
-      const ping = Math.floor(Math.random() * 15) + 18;
+      const ping = Math.floor(Math.random() * 12) + 16;
       status.innerText = `● Ping: ${ping}ms • 100% Blazing Fast`;
       showToast(`CDN Edge latency measured: ${ping}ms`);
-    }, 600);
+    }, 500);
   }
 }
 
@@ -965,7 +987,7 @@ function renderBookmarksView(container) {
       <div style="font-size:48px; margin-bottom:12px;">🔖</div>
       <h3 style="font-size:18px; font-weight:800; color:var(--text-primary); margin-bottom:6px;">No Bookmarks Saved Yet</h3>
       <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">While watching any lecture, click the "Save" button to keep it in your bookmarks.</p>
-      <button class="btn-hero-primary" onclick="navigateToTab('home')">Explore Courses</button>
+      <button class="btn-hero-primary" onclick="navigateToTab('apps')">Explore Courses</button>
     </div>
   `;
 }
@@ -1006,30 +1028,228 @@ function renderSettingsView(container) {
   `;
 }
 
-// 11. ABOUT DEVELOPER VIEW
+// 11. MEET THE DEVELOPER — NEXORA VIEW
 function renderDeveloperView(container) {
+  const techStack = [
+    "Python & FastAPI", "JavaScript & TypeScript", "React & Next.js", "Node.js & Express",
+    "PHP & MySQL", "MongoDB & SQLite", "Flutter & Mobile", "REST & GraphQL APIs",
+    "AI & Autonomous Workflows", "Docker & Linux Containers", "Cloud & Server DevOps",
+    "Telegram Bot Infrastructure", "Video Processing (FFmpeg / yt-dlp)", "Backblaze B2 & CDN Routing"
+  ];
+
+  const buildAreas = [
+    {
+      icon: "🌐",
+      title: "Web Platforms",
+      desc: "Modern, responsive and scalable web applications designed around real users with rich interactive experiences."
+    },
+    {
+      icon: "⚡",
+      title: "Backend Systems",
+      desc: "High-concurrency APIs, JWT authentication, resilient database layers, background job workers and robust business logic."
+    },
+    {
+      icon: "🤖",
+      title: "Automation Workflows",
+      desc: "Intelligent systems that eliminate repetitive manual tasks through autonomous failover, Telegram hooks, and scheduled jobs."
+    },
+    {
+      icon: "🧠",
+      title: "AI-Powered Products",
+      desc: "Exploring how modern AI models, agentic workflows, and LLMs can make software significantly more useful, interactive and smart."
+    },
+    {
+      icon: "☁️",
+      title: "Cloud & Infrastructure",
+      desc: "Architecting, deploying and managing applications, microservices, container clusters, databases and distributed edge workloads."
+    },
+    {
+      icon: "🎓",
+      title: "Education Technology",
+      desc: "Building specialized platforms that make complex learning resources simpler to organize, access, stream and manage."
+    }
+  ];
+
+  const lifecycleSteps = [
+    { num: "01", name: "Idea" },
+    { num: "02", name: "Architecture" },
+    { num: "03", name: "Development" },
+    { num: "04", name: "Testing" },
+    { num: "05", name: "Deployment" },
+    { num: "06", name: "Improvement" }
+  ];
+
   container.innerHTML = `
-    <div class="section-header-row" style="margin-bottom: 24px;">
-      <h1 class="section-heading" style="font-size: 28px;">About the Developer</h1>
-      <p class="section-subheading">Dedicated to building high-speed educational tools for learners worldwide.</p>
+    <!-- Hero Profile Card -->
+    <div class="dev-hero-card">
+      <div class="dev-hero-top">
+        <div class="dev-avatar-container">
+          <div class="dev-avatar-glow"></div>
+          <div class="dev-avatar-box">👨‍💻</div>
+        </div>
+        <div class="dev-header-info">
+          <div class="dev-role-pills">
+            <span class="dev-pill">Software Developer</span>
+            <span class="dev-pill">Technology Builder</span>
+            <span class="dev-pill">Entrepreneur</span>
+            <span class="dev-pill">Product Architect</span>
+          </div>
+          <h1 class="dev-name">
+            <span>Nexora</span>
+            <span class="dev-status-badge">● Available for Projects</span>
+          </h1>
+          <div class="dev-subtitle">Built by Nexora • Technology • Innovation • Automation • Education</div>
+          <p class="dev-bio-text">
+            Nexora is an independent technology developer and entrepreneur passionate about transforming ideas into practical, scalable, and meaningful digital products. With a strong interest in software engineering, artificial intelligence, automation, cloud technology, cybersecurity, web development, and digital platforms, Nexora focuses on building systems that are not only visually modern but also reliable, scalable, and useful in the real world.
+          </p>
+          <p class="dev-bio-text" style="margin-top:8px;">
+            From designing interfaces to engineering backend systems, databases, APIs, automation workflows, and cloud infrastructure, Nexora enjoys working across the complete technology stack.
+          </p>
+          
+          <div class="dev-cta-row">
+            <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-dev-telegram">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.93-1.28 4.88-2.12 5.86-2.54 2.79-1.17 3.37-1.37 3.75-1.37.08 0 .27.02.39.12.1.08.13.2.14.28-.01.06.01.24 0 .38z"/></svg>
+              <span>Contact Bot: @course_wallah_official_bot</span>
+            </a>
+            <a href="https://t.me/coursewallahoffical1" target="_blank" class="btn-dev-channel">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.93-1.28 4.88-2.12 5.86-2.54 2.79-1.17 3.37-1.37 3.75-1.37.08 0 .27.02.39.12.1.08.13.2.14.28-.01.06.01.24 0 .38z"/></svg>
+              <span>Join Channel: t.me/coursewallahoffical1</span>
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div style="background:var(--bg-card); border: 1px solid var(--border-subtle); border-radius:24px; padding:36px; display:flex; gap:32px; align-items:center;">
-      <div class="brand-logo-wrap" style="width:80px; height:80px;">
-        <div class="brand-logo-glow"></div>
-        <div class="brand-fallback-logo" style="width:76px; height:76px; font-size:28px;">CW</div>
+    <!-- Quote Banner -->
+    <div class="dev-quote-box">
+      <span class="dev-quote-icon">⚡</span>
+      <span class="dev-quote-text">“A developer who doesn't just write code — builds systems, products and ideas into reality.”</span>
+    </div>
+
+    <!-- The Journey & Product Lifecycle -->
+    <h2 class="dev-section-heading">
+      <span>🚀</span>
+      <span>The Journey & Product-First Mindset</span>
+    </h2>
+    <p style="font-size:14px; color:var(--text-secondary); line-height:1.7; margin-bottom:16px;">
+      The journey started with a simple curiosity about how software works and how technology can solve everyday problems. Over time, that curiosity evolved into hands-on development across multiple areas of technology—building websites, applications, automation tools, educational platforms, APIs, cloud systems, and experimental products.
+    </p>
+
+    <!-- Product Lifecycle Track -->
+    <div class="dev-lifecycle-track">
+      ${lifecycleSteps.map(st => `
+        <div class="dev-lifecycle-step">
+          <span class="dev-step-num">${st.num}</span>
+          <span class="dev-step-name">${st.name}</span>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- What Nexora Builds -->
+    <h2 class="dev-section-heading">
+      <span>🧠</span>
+      <span>What Nexora Builds</span>
+    </h2>
+    <div class="dev-grid-3col">
+      ${buildAreas.map(item => `
+        <div class="dev-card">
+          <div class="dev-card-icon">${item.icon}</div>
+          <h3 class="dev-card-title">${item.title}</h3>
+          <p class="dev-card-desc">${item.desc}</p>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Building for Education: The Course Wallah Story -->
+    <h2 class="dev-section-heading">
+      <span>🎓</span>
+      <span>Building for Education — Course Wallah Ecosystem</span>
+    </h2>
+    <div style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:24px; padding:32px; margin-bottom:32px;">
+      <p style="font-size:15px; color:var(--text-primary); line-height:1.7; margin-bottom:16px;">
+        One of Nexora's strongest interests is <strong>education technology</strong>. <em>Course Wallah</em> represents this vision: a platform where educational content, technology and automation come together to create a smoother, faster learning experience for students.
+      </p>
+      <p style="font-size:14px; color:var(--text-secondary); line-height:1.7; margin-bottom:20px;">
+        Behind the student-facing interface is a robust engine designed around:
+      </p>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:20px;">
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">📁 Structured Courses & Batches</div>
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">⚙️ Automated Content Processing</div>
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">🎥 Multi-CDN Video Delivery</div>
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">📄 Verified Digital Notes & DPPs</div>
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">🤖 Telegram-Based Administration</div>
+        <div style="padding:12px; background:rgba(99,102,241,0.06); border-radius:12px; font-size:13px; font-weight:700; color:var(--text-primary);">☁️ Scalable Railway & B2 Storage</div>
       </div>
-      <div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-          <h2 style="font-size:22px; font-weight:800; color:var(--text-primary);">Course Wallah Team & MadXABhi</h2>
-          <span style="font-size:11px; background:rgba(16,185,129,0.12); color:#10B981; font-weight:800; padding:2px 8px; border-radius:6px;">VERIFIED CREATOR</span>
-        </div>
-        <p style="font-size:14px; color:var(--text-secondary); line-height:1.6; margin-bottom:16px;">
-          Empowering engineering, competitive exam, and coding students with free, high-speed, ad-free access to top-tier curriculum.
+      <div style="font-size:14px; font-weight:800; color:var(--accent-emerald);">
+        “The goal isn't simply to build another course website. The goal is to build technology that makes learning simpler, more accessible and more organized.”
+      </div>
+    </div>
+
+    <!-- Builder Mindset & Engineering Philosophy -->
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:32px;">
+      <!-- Builder Mindset -->
+      <div style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:24px; padding:28px;">
+        <h3 style="font-size:18px; font-weight:800; color:var(--text-primary); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <span>🏗️</span>
+          <span>Builder Mindset</span>
+        </h3>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.6; margin-bottom:16px;">
+          Nexora believes that good software isn't created by technology alone. It requires:
         </p>
-        <div style="display:flex; gap:10px;">
-          <a href="https://t.me/course_mallah_bot" target="_blank" class="btn-hero-primary" style="padding:8px 18px; font-size:13px;">Telegram Hub</a>
+        <ul style="list-style:none; display:flex; flex-direction:column; gap:10px; font-size:13px; color:var(--text-primary);">
+          <li>💡 <strong>Curiosity:</strong> To ask better questions and understand root problems.</li>
+          <li>🎯 <strong>Persistence:</strong> To solve difficult architectural bottlenecks.</li>
+          <li>🧪 <strong>Experimentation:</strong> To discover faster and more scalable approaches.</li>
+          <li>🛡️ <strong>Discipline:</strong> To build reliable, maintainable systems.</li>
+          <li>🎨 <strong>Creativity:</strong> To turn abstract ideas into intuitive user experiences.</li>
+        </ul>
+      </div>
+
+      <!-- Engineering Philosophy -->
+      <div style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:24px; padding:28px;">
+        <h3 style="font-size:18px; font-weight:800; color:var(--text-primary); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <span>🔐</span>
+          <span>Engineering Philosophy</span>
+        </h3>
+        <p style="font-size:13px; font-weight:800; color:var(--primary); margin-bottom:12px;">
+          “Build fast. Learn continuously. Secure what matters. Improve relentlessly.”
+        </p>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.6; margin-bottom:16px;">
+          Security, reliability and scalability are treated as part of development—not something added at the very end. The focus is on creating systems that are:
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(16,185,129,0.12); color:#10B981; font-weight:700; font-size:12px;">✓ Secure</span>
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(99,102,241,0.12); color:#818CF8; font-weight:700; font-size:12px;">✓ Scalable</span>
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(59,130,246,0.12); color:#60A5FA; font-weight:700; font-size:12px;">✓ Maintainable</span>
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(245,158,11,0.12); color:#FBBF24; font-weight:700; font-size:12px;">✓ High-Performance</span>
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(236,72,153,0.12); color:#F472B6; font-weight:700; font-size:12px;">✓ User-Centric</span>
+          <span style="padding:6px 12px; border-radius:8px; background:rgba(6,182,212,0.12); color:#22D3EE; font-weight:700; font-size:12px;">✓ Automation-Ready</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Tech Stack Cloud -->
+    <h2 class="dev-section-heading">
+      <span>🛠️</span>
+      <span>Technology Stack & Tools</span>
+    </h2>
+    <div class="dev-tech-cloud">
+      ${techStack.map(t => `<span class="dev-tech-badge">⚡ ${t}</span>`).join('')}
+    </div>
+
+    <!-- Direct Telegram Contact Card -->
+    <div style="background:linear-gradient(135deg, rgba(34,158,217,0.12) 0%, rgba(99,102,241,0.15) 100%); border:1px solid rgba(34,158,217,0.35); border-radius:24px; padding:32px; text-align:center; margin-top:20px;">
+      <h3 style="font-size:22px; font-weight:900; color:#FFFFFF; margin-bottom:8px;">Have an Idea, Collaboration, or Need Support?</h3>
+      <p style="font-size:14px; color:var(--text-secondary); max-width:600px; margin:0 auto 20px;">
+        Reach out directly via Telegram bot or join the official Course Wallah community channel.
+      </p>
+      <div style="display:flex; justify-content:center; gap:16px; flex-wrap:wrap;">
+        <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-hero-primary" style="padding:10px 24px; background:#229ED9;">
+          <span>🤖 Contact @course_wallah_official_bot</span>
+        </a>
+        <a href="https://t.me/coursewallahoffical1" target="_blank" class="btn-hero-primary" style="padding:10px 24px; background: linear-gradient(135deg, #0284C7, #06B6D4);">
+          <span>📢 Channel: t.me/coursewallahoffical1</span>
+        </a>
       </div>
     </div>
   `;
@@ -1041,13 +1261,25 @@ function renderHelpCenterView(container) {
     { q: "How do I access video lectures and notes?", a: "Navigate to 'My Apps', select your desired course provider (e.g. Physics Wallah, Apna College), choose your batch, and click 'Study' to launch the player and notes." },
     { q: "Are all courses and batch archives free?", a: "Yes! All batch archives and study materials on Course Wallah are 100% free for educational research and study." },
     { q: "How often are new batches updated?", a: "Our cloud ingestion bot runs continuously to process and upload new live recordings and notes daily." },
-    { q: "How do I download lecture notes in PDF?", a: "Inside the Study Studio player, switch to the 'Notes & PDFs' tab on the right drawer and click 'Download Clean PDF'." }
+    { q: "How do I download lecture notes in PDF?", a: "Inside the Study Studio player, switch to the 'Notes & PDFs' tab on the right drawer and click 'Download Clean PDF'." },
+    { q: "How do I contact the developer or report an issue?", a: "You can reach out directly via Telegram bot @course_wallah_official_bot or join our official channel at t.me/coursewallahoffical1." }
   ];
 
   container.innerHTML = `
     <div class="section-header-row" style="margin-bottom: 24px;">
       <h1 class="section-heading" style="font-size: 28px;">Help Center & Guides</h1>
-      <p class="section-subheading">Frequently asked questions and student support.</p>
+      <p class="section-subheading">Frequently asked questions and direct support channels.</p>
+    </div>
+
+    <!-- Quick Support Card -->
+    <div style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:20px; padding:24px; display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; flex-wrap:wrap; gap:16px;">
+      <div>
+        <h3 style="font-size:16px; font-weight:800; color:var(--text-primary); margin-bottom:4px;">Need instant assistance or have feedback?</h3>
+        <p style="font-size:13px; color:var(--text-secondary);">Message our official bot directly for fast resolution.</p>
+      </div>
+      <a href="https://t.me/course_wallah_official_bot" target="_blank" class="btn-hero-primary" style="padding:8px 20px; background:#229ED9;">
+        <span>Contact @course_wallah_official_bot</span>
+      </a>
     </div>
 
     <div>
