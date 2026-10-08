@@ -4,7 +4,7 @@ import time
 import logging
 import asyncio
 import urllib.parse
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple, Union, Set, Callable
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified, RPCError
 from pyrogram.types import (
