@@ -417,7 +417,8 @@ class ContentRepository:
         raw_reference: Optional[str] = None,
         has_video: bool = False,
         has_pdf: bool = False,
-        publication_status: Optional[PublicationStatus] = None
+        publication_status: Optional[PublicationStatus] = None,
+        thumbnail_url: Optional[str] = None
     ) -> Lecture:
         stmt = select(Lecture).where(and_(Lecture.batch_id == batch_id, Lecture.lecture_index == lecture_index))
         res = await self.session.execute(stmt)
@@ -439,6 +440,7 @@ class ContentRepository:
                 raw_reference=raw_reference,
                 has_video=has_video,
                 has_pdf=has_pdf,
+                thumbnail_url=thumbnail_url,
                 sort_order=lecture_index,
                 publication_status=pub_st
             )
@@ -455,6 +457,8 @@ class ContentRepository:
                 lecture.source_pdf_url = source_pdf_url
             if provider:
                 lecture.provider = provider
+            if thumbnail_url:
+                lecture.thumbnail_url = thumbnail_url
             lecture.has_video = has_video
             lecture.has_pdf = has_pdf
             await self.session.flush()

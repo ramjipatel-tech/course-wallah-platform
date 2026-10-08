@@ -426,9 +426,26 @@ class ContentProcessingEngine:
                             title=f"{item.index:03d}_{item.title}",
                             quality=quality_pref
                         )
-                        if dl_meta and dl_meta.get("pdf_url") and not item.pdf_url:
-                            item.pdf_url = dl_meta["pdf_url"]
-                            logger.info(f"[MEDIA_ROUTING] Companion PDF resolved in single API call for lecture #{item.index}: {sanitize_url_for_logging(item.pdf_url)}")
+                        if dl_meta:
+                            if dl_meta.get("pdf_url") and not item.pdf_url:
+                                item.pdf_url = dl_meta["pdf_url"]
+                                logger.info(f"[MEDIA_ROUTING] Companion PDF resolved in single API call for lecture #{item.index}: {sanitize_url_for_logging(item.pdf_url)}")
+                            
+                            # Attach high-res provider thumbnail to lecture and batch
+                            thumb_url = dl_meta.get("thumbnail")
+                            if thumb_url:
+                                try:
+                                    async with get_db_session() as db_s:
+                                        repo_s = ContentRepository(db_s)
+                                        lec_rec = await repo_s.get_lecture_by_index(batch_id, item.index)
+                                        if lec_rec and not lec_rec.thumbnail_url:
+                                            lec_rec.thumbnail_url = thumb_url
+                                        b_rec = await repo_s.get_batch_by_id(batch_id)
+                                        if b_rec and not b_rec.thumbnail_url:
+                                            b_rec.thumbnail_url = thumb_url
+                                            logger.info(f"[BATCH_THUMBNAIL_ATTACHED] batch_id={batch_id} thumb={thumb_url}")
+                                except Exception as th_err:
+                                    logger.debug(f"[THUMBNAIL_PROPAGATE_NOTICE] {th_err}")
                         break
                     except VideoUnavailableError as vu_e:
                         # Legitimate deterministic provider response: Video=NO | PDF=YES
@@ -437,6 +454,10 @@ class ContentProcessingEngine:
                             item.pdf_url = vu_e.pdf_url
                         item.video_url = None
                         downloaded_video_path = None
+                        
+                        # Check metadata from error for thumbnail
+                        th_url = vu_e.metadata.get("thumbnail") if hasattr(vu_e, "metadata") and vu_e.metadata else None
+                        
                         # Update DB record to reflect PDF-only
                         async with get_db_session() as db_s:
                             db_repo = ContentRepository(db_s)
@@ -451,8 +472,13 @@ class ContentProcessingEngine:
                                 provider=item.provider,
                                 raw_reference=item.raw_reference,
                                 has_video=False,
-                                has_pdf=bool(item.pdf_url)
+                                has_pdf=bool(item.pdf_url),
+                                thumbnail_url=th_url
                             )
+                            if th_url:
+                                b_rec = await db_repo.get_batch_by_id(batch_id)
+                                if b_rec and not b_rec.thumbnail_url:
+                                    b_rec.thumbnail_url = th_url
                         phase_states["download"] = "N/A"
                         phase_states["watermark"] = "N/A"
                         phase_states["thumbnail"] = "N/A"

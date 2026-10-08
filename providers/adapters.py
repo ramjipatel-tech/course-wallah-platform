@@ -134,7 +134,7 @@ class NativeMediaHelper:
 
         # 2. Extract Video Stream URL
         video_url = None
-        qualities = d.get("qualities") or d.get("streams") or d.get("video_urls") or d.get("encrypted_links")
+        qualities = d.get("encrypted_links") or d.get("download_links") or d.get("qualities") or d.get("streams") or d.get("video_urls")
         if isinstance(qualities, list) and qualities:
             target_num = re.search(r"\d+", str(target_quality)) if target_quality else None
             matched_q = None
@@ -142,19 +142,55 @@ class NativeMediaHelper:
                 target_val = target_num.group(0)
                 for q_item in qualities:
                     if isinstance(q_item, dict):
-                        q_label = str(q_item.get("quality") or q_item.get("label") or q_item.get("resolution") or "")
+                        q_label = str(q_item.get("quality") or q_item.get("bitrate") or q_item.get("label") or q_item.get("resolution") or "")
                         if target_val in q_label:
-                            matched_q = q_item.get("link") or q_item.get("url") or q_item.get("video_url")
-                            break
+                            matched_q = (
+                                q_item.get("path")
+                                or q_item.get("backup_url")
+                                or q_item.get("backup_url2")
+                                or q_item.get("link")
+                                or q_item.get("url")
+                                or q_item.get("video_url")
+                            )
+                            if matched_q:
+                                break
             if not matched_q:
-                first_item = qualities[-1] if isinstance(qualities[-1], dict) else qualities[0]
-                if isinstance(first_item, dict):
-                    matched_q = first_item.get("link") or first_item.get("url") or first_item.get("video_url")
+                # Pick highest quality / first available
+                for q_item in qualities:
+                    if isinstance(q_item, dict):
+                        cand = (
+                            q_item.get("path")
+                            or q_item.get("backup_url")
+                            or q_item.get("backup_url2")
+                            or q_item.get("link")
+                            or q_item.get("url")
+                            or q_item.get("video_url")
+                        )
+                        if cand and isinstance(cand, str) and cand.strip():
+                            matched_q = cand.strip()
+                            break
             if matched_q:
                 video_url = str(matched_q).strip()
 
+        # Fallback to direct field links
         if not video_url:
-            for key in ("link", "video_url", "stream_url", "m3u8_url", "m3u8", "video", "encrypted_link", "encrypted_url", "url"):
+            for key in (
+                "download_link",
+                "file_link",
+                "download_url_higher_version",
+                "download_url_lower_version",
+                "video_player_url",
+                "link",
+                "video_url",
+                "stream_url",
+                "m3u8_url",
+                "m3u8",
+                "video",
+                "encrypted_link",
+                "encrypted_url",
+                "url",
+                "youtube_url"
+            ):
                 val = d.get(key)
                 if val and isinstance(val, str) and val.strip():
                     val_str = val.strip()
@@ -169,7 +205,22 @@ class NativeMediaHelper:
 
         # 3. Extract PDF URL
         pdf_url = None
-        for key in ("document_url", "pdf_url", "pdf", "notes", "notes_url", "doc_url", "material_url", "attachment_url", "notes_pdf"):
+        for key in (
+            "pdf_link",
+            "pdf_link2",
+            "study_material_link",
+            "pdf_summary_link",
+            "pdf2_summary_link",
+            "document_url",
+            "pdf_url",
+            "pdf",
+            "notes",
+            "notes_url",
+            "doc_url",
+            "material_url",
+            "attachment_url",
+            "notes_pdf"
+        ):
             val = d.get(key)
             if val and isinstance(val, str) and val.strip():
                 pdf_url = val.strip()
@@ -181,8 +232,22 @@ class NativeMediaHelper:
                 pdf_url = file_val.strip()
 
         # 4. Metadata
-        title = d.get("title") or d.get("video_name") or d.get("name") or d.get("lecture_title") or ""
-        thumbnail = d.get("thumbnail") or d.get("thumb") or d.get("image") or d.get("poster") or ""
+        title = (
+            d.get("Title")
+            or d.get("title")
+            or d.get("video_name")
+            or d.get("name")
+            or d.get("lecture_title")
+            or ""
+        )
+        thumbnail = (
+            d.get("thumbnail")
+            or d.get("thumb")
+            or d.get("image")
+            or d.get("poster")
+            or d.get("cover_image")
+            or ""
+        )
         
         qs = parse_qs(parsed.query)
         video_id = str(d.get("video_id") or d.get("id") or qs.get("video_id", [""])[0] or "")
@@ -212,11 +277,86 @@ class NativeMediaHelper:
         custom_dir: str = "downloads"
     ) -> str:
         """
-        Downloads HLS (.m3u8) streams via yt-dlp or ffmpeg into clean, validated MP4 containers.
+        Downloads HLS (.m3u8) streams via yt-dlp or ffmpeg into clean, validated MP4 containers
+        using appropriate Referer and Origin headers.
         """
         dest_dir = Path(custom_dir)
         dest_dir.mkdir(parents=True, exist_ok=True)
         out_file = dest_dir / f"{clean_title}.mp4"
+
+        # Determine smart referer from URL domain
+        parsed_stream = urlparse(url)
+        origin_domain = f"{parsed_stream.scheme}://{parsed_stream.netloc}" if parsed_stream.netloc else "https://classx.co.in"
+        req_headers = cls.DEFAULT_HEADERS.copy()
+        req_headers["Referer"] = f"{origin_domain}/"
+        req_headers["Origin"] = origin_domain
+        if headers:
+            req_headers.update(headers)
+
+        # If key is provided in stream URL (e.g. url*key), delegate to Spayee decryptor
+        if "*" in url:
+            stream_part, key_part = url.split("*", 1)
+            return original_spayee.download_spayee_hls(
+                url=stream_part.strip(),
+                output_path=None,
+                clean_title=clean_title,
+                key=key_part.strip(),
+                quality="720p",
+                custom_dir=custom_dir
+            )
+
+        # 1. Attempt download using yt-dlp
+        try:
+            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via yt-dlp: {clean_title}")
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-check-certificates",
+                "--concurrent-fragments", "8",
+                "-N", "8",
+                "--retries", "10",
+                "--fragment-retries", "10",
+                "--add-header", f"Referer:{req_headers['Referer']}",
+                "--add-header", f"Origin:{req_headers['Origin']}",
+                "-o", str(out_file),
+                url
+            ]
+            if headers:
+                for k, v in headers.items():
+                    if k not in ("Referer", "Origin"):
+                        cmd.extend(["--add-header", f"{k}:{v}"])
+
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            if res.returncode == 0 and out_file.exists() and out_file.stat().st_size > 1024:
+                return str(out_file)
+            else:
+                logger.warning(f"[NATIVE_HELPER] yt-dlp exited with {res.returncode}: {res.stderr[:200]}")
+        except Exception as yt_err:
+            logger.warning(f"[NATIVE_HELPER] yt-dlp failed: {yt_err}, falling back to ffmpeg...")
+
+        # 2. Fallback to ffmpeg
+        try:
+            logger.info(f"[NATIVE_HELPER] Downloading HLS stream via ffmpeg: {clean_title}")
+            ffmpeg_cmd = ["ffmpeg", "-y"]
+            hdr_str = ""
+            for k, v in req_headers.items():
+                hdr_str += f"{k}: {v}\r\n"
+            if hdr_str:
+                ffmpeg_cmd.extend(["-headers", hdr_str])
+
+            ffmpeg_cmd.extend([
+                "-i", url,
+                "-c", "copy",
+                "-bsf:a", "aac_adtstoasc",
+                "-movflags", "+faststart",
+                str(out_file)
+            ])
+            res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=1800)
+            if res.returncode == 0 and out_file.exists() and out_file.stat().st_size > 1024:
+                return str(out_file)
+            else:
+                raise RuntimeError(f"ffmpeg failed with exit {res.returncode}: {res.stderr[:200]}")
+        except Exception as ff_err:
+            raise RuntimeError(f"HLS download failed across all engines: {ff_err}")
 
         # If key is provided in stream URL (e.g. url*key), delegate to Spayee decryptor
         if "*" in url:
