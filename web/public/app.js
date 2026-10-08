@@ -923,41 +923,6 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
-  const watermarkText = window.CW_SECURITY ? window.CW_SECURITY.getWatermarkText() : `COURSE WALLAH • CW-ID-${lectureId.slice(0,6)} • ENCRYPTED`;
-
-  container.innerHTML = `
-    <!-- Top Back Navigation -->
-    <div class="batch-detail-header-row" style="margin-bottom: 20px;">
-      <button class="btn-sub-back" onclick="navigateToSubject('${appSlugOrId}', '${batchIdOrSlug}', '${subjectIdOrSlug}')">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        <span>Back</span>
-      </button>
-    </div>
-
-    <!-- Main AS Multiverse Player Card -->
-    <div class="as-player-card">
-      
-      <!-- Top App Header Row (Screenshot Match) -->
-      <div class="as-player-header-row">
-        <div class="as-player-app-left">
-          <img src="/static/logo.png" alt="App Logo" class="as-player-app-avatar" onerror="this.src='/static/logo.png'">
-          <div class="as-player-app-meta">
-            <h2 class="as-player-app-name">${lecture.batch_name || 'Course Wallah'}</h2>
-            <span class="as-player-app-secure">● SECURE CLIENT SESSION ACTIVE</span>
-          </div>
-        </div>
-        <button class="btn-show-announcement" onclick="showAnnouncementModal('${escapeHtml(lecture.batch_name || 'Batch Updates')}')">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span>Show Announcement</span>
-        </button>
-      </div>
-
-      <!-- Video Meta Details -->
-      <div class="as-player-meta-wrap">
-        <div class="as-player-subtag">
-          <span class="subtag-pill">VIDEO LECTURE</span>
-          <span class="subtag-dot">•</span>
-          <span class="subtag-playing">NOW PLAYING</span>
   const isDirectHls = Boolean(access.stream_url);
   const hasYouTube = Boolean(access.youtube_video_id);
 
