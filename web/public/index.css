@@ -90,6 +90,12 @@ body.theme-dark {
   padding: 0;
 }
 
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
 html {
   scroll-behavior: smooth;
   font-size: 16px;
@@ -3591,12 +3597,6 @@ body.theme-light .guidance-hint-item {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
-/* ==============================================================================
-   CINEMA VIDEO PLAYER VIEW (CLEAN THEATER MODE)
-   ============================================================================== */
-
-.player-top-nav-bar {
-  display: flex;
 /* ==============================================================================
    CINEMA VIDEO PLAYER VIEW (AS MULTIVERSE EXACT TABLET DESIGN)
    ============================================================================== */
