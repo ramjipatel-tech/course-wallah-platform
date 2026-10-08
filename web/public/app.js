@@ -863,7 +863,8 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
             </div>
             <div class="notes-cards-grid">
               ${nLecs.map(note => {
-                const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
+                const streamViewerUrl = note.id ? `/api/v1/pdfs/${note.id}/content` : (note.source_pdf_url ? `/api/v1/pdfs/proxy?url=${encodeURIComponent(note.source_pdf_url)}` : '');
+                const downloadUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
                 return `
                   <div class="note-pdf-card">
                     <div class="note-card-left">
@@ -876,11 +877,11 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
                       </div>
                     </div>
                     <div class="note-card-actions">
-                      <button class="btn-note-view" onclick="openPdfModal('${pdfUrl}', '${note.title.replace(/'/g, "\\'")}')">
+                      <button class="btn-note-view" onclick="openPdfModal('${streamViewerUrl}', '${note.title.replace(/'/g, "\\'")}')">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         <span>View PDF</span>
                       </button>
-                      <a href="${pdfUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
+                      <a href="${downloadUrl}" target="_blank" download class="btn-note-download" title="Direct Download">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         <span>Download</span>
                       </a>
@@ -1101,10 +1102,14 @@ async function openPdfModal(pdfUrl, title) {
     document.body.appendChild(modal);
   }
 
-  // Resolve binary content URL if an access JSON url was passed
+  // Resolve binary content URL or proxy if external CDN
   let binaryPdfUrl = pdfUrl;
   if (pdfUrl.includes('/api/v1/pdfs/') && pdfUrl.endsWith('/access')) {
     binaryPdfUrl = pdfUrl.replace('/access', '/content');
+  } else if (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) {
+    if (!pdfUrl.startsWith(window.location.origin)) {
+      binaryPdfUrl = `/api/v1/pdfs/proxy?url=${encodeURIComponent(pdfUrl)}`;
+    }
   }
 
   modal.innerHTML = `
