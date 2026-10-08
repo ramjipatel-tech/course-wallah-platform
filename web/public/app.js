@@ -843,7 +843,7 @@ async function renderSubjectView(container, appSlugOrId, batchIdOrSlug, subjectI
       ` : `
         <div class="notes-cards-grid">
           ${noteLectures.map(note => {
-            const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/access`;
+            const pdfUrl = note.source_pdf_url || `/api/v1/pdfs/${note.id}/content`;
             return `
               <div class="note-pdf-card">
                 <div class="note-card-left">
@@ -1079,6 +1079,12 @@ async function openPdfModal(pdfUrl, title) {
     document.body.appendChild(modal);
   }
 
+  // Resolve binary content URL if an access JSON url was passed
+  let binaryPdfUrl = pdfUrl;
+  if (pdfUrl.includes('/api/v1/pdfs/') && pdfUrl.endsWith('/access')) {
+    binaryPdfUrl = pdfUrl.replace('/access', '/content');
+  }
+
   modal.innerHTML = `
     <div class="cw-pdf-modal-card">
       <div class="cw-pdf-header">
@@ -1092,12 +1098,13 @@ async function openPdfModal(pdfUrl, title) {
           <button class="btn-pdf-ctrl" onclick="changePdfPage(1)" title="Next Page">Next &rarr;</button>
           <button class="btn-pdf-ctrl" onclick="zoomPdf(0.2)" title="Zoom In">🔍 +</button>
           <button class="btn-pdf-ctrl" onclick="zoomPdf(-0.2)" title="Zoom Out">🔍 -</button>
-          <a href="${pdfUrl}" target="_blank" download class="btn-pdf-download-modal" title="Download Clean PDF">⬇️ Download</a>
+          <a href="${binaryPdfUrl}" target="_blank" download class="btn-pdf-download-modal" title="Download Clean PDF">⬇️ Download</a>
           <button class="btn-pdf-close" onclick="closePdfModal()" title="Close Viewer">&times;</button>
         </div>
       </div>
       <div class="cw-pdf-canvas-container" id="cw-pdf-container">
-        <canvas id="cw-pdf-canvas"></canvas>
+        <div class="spinner" id="pdf-loading-spinner" style="margin: 40px auto;"></div>
+        <canvas id="cw-pdf-canvas" style="display:none;"></canvas>
       </div>
     </div>
   `;
@@ -1105,23 +1112,35 @@ async function openPdfModal(pdfUrl, title) {
   modal.classList.add('active');
   document.body.style.overflow = 'hidden';
 
+  // Backdrop click closes modal
+  modal.onclick = (e) => {
+    if (e.target === modal) closePdfModal();
+  };
+
   try {
     if (typeof pdfjsLib !== 'undefined') {
-      const loadingTask = pdfjsLib.getDocument(pdfUrl);
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const loadingTask = pdfjsLib.getDocument(binaryPdfUrl);
       currentPdfDoc = await loadingTask.promise;
       currentPdfPage = 1;
       const totalEl = document.getElementById('pdf-total-pages');
       if (totalEl) totalEl.innerText = currentPdfDoc.numPages;
+      const spinner = document.getElementById('pdf-loading-spinner');
+      if (spinner) spinner.style.display = 'none';
+      const canvas = document.getElementById('cw-pdf-canvas');
+      if (canvas) canvas.style.display = 'block';
       await renderPdfPage(currentPdfPage);
     } else {
-      throw new Error('PDF.js not loaded');
+      throw new Error('PDF.js library not ready');
     }
   } catch (err) {
-    console.debug('PDF.js canvas fallback to direct embed:', err);
+    console.debug('PDF.js canvas renderer fallback to iframe:', err);
     const container = document.getElementById('cw-pdf-container');
     if (container) {
       container.innerHTML = `
-        <iframe src="${pdfUrl}" style="width:100%; height:75vh; border:none; border-radius:12px;"></iframe>
+        <iframe src="${binaryPdfUrl}" style="width:100%; height:75vh; border:none; border-radius:12px;"></iframe>
       `;
     }
   }
@@ -1170,6 +1189,7 @@ function closePdfModal() {
   const modal = document.getElementById('cw-pdf-modal');
   if (modal) {
     modal.classList.remove('active');
+    modal.innerHTML = '';
   }
   document.body.style.overflow = '';
 }
