@@ -100,8 +100,16 @@ def _run_migrations(sync_conn):
     # Migration for youtube_uploads
     if "youtube_uploads" in tables:
         existing_cols = {c["name"] for c in inspector.get_columns("youtube_uploads")}
+        
+        # Drop foreign key constraint on job_id if present to avoid FK violation when arbitrary job/batch id is passed
+        try:
+            sync_conn.execute(text("ALTER TABLE youtube_uploads DROP CONSTRAINT IF EXISTS youtube_uploads_job_id_fkey"))
+        except Exception as ex:
+            logger.debug(f"[MIGRATION] Drop constraint youtube_uploads_job_id_fkey notice: {ex}")
+
         col_defs = {
             "account_id": "VARCHAR(64)",
+            "batch_id": "VARCHAR(64)",
             "channel_id": "VARCHAR(64)",
             "youtube_url": "VARCHAR(512)",
             "upload_completed_at": "TIMESTAMP"
@@ -112,6 +120,7 @@ def _run_migrations(sync_conn):
                     sync_conn.execute(text(f"ALTER TABLE youtube_uploads ADD COLUMN {col_name} {col_type}"))
                 except Exception as ex:
                     logger.debug(f"[MIGRATION] Column {col_name} on youtube_uploads skipped: {ex}")
+
 
 async def init_db():
     """Initializes all database tables safely and runs pending migrations."""

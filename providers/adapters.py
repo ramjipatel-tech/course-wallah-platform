@@ -61,6 +61,13 @@ class NativeMediaHelper:
         "Connection": "keep-alive"
     }
 
+    @staticmethod
+    def _is_pdf_url(u: Optional[str]) -> bool:
+        if not u or not isinstance(u, str):
+            return False
+        clean = u.strip().split("?")[0].split("#")[0].lower()
+        return clean.endswith(".pdf") or ".pdf" in urlparse(u).path.lower() or "/pdf" in clean
+
     @classmethod
     def resolve_lecture_source(cls, url: str, target_quality: Optional[str] = None) -> AppxLectureResult:
         """
@@ -88,7 +95,7 @@ class NativeMediaHelper:
                 video_quality=target_quality or "720p"
             )
 
-        if path_lower.endswith(".pdf"):
+        if cls._is_pdf_url(clean_url):
             return AppxLectureResult(
                 pdf_url=clean_url,
                 has_pdf=True,
@@ -132,78 +139,7 @@ class NativeMediaHelper:
             is_drm = True
             drm_msg = str(d.get("drm_message") or d.get("drm_type") or "Widevine DRM Encrypted")
 
-        # 2. Extract Video Stream URL
-        video_url = None
-        qualities = d.get("encrypted_links") or d.get("download_links") or d.get("qualities") or d.get("streams") or d.get("video_urls")
-        if isinstance(qualities, list) and qualities:
-            target_num = re.search(r"\d+", str(target_quality)) if target_quality else None
-            matched_q = None
-            if target_num:
-                target_val = target_num.group(0)
-                for q_item in qualities:
-                    if isinstance(q_item, dict):
-                        q_label = str(q_item.get("quality") or q_item.get("bitrate") or q_item.get("label") or q_item.get("resolution") or "")
-                        if target_val in q_label:
-                            matched_q = (
-                                q_item.get("path")
-                                or q_item.get("backup_url")
-                                or q_item.get("backup_url2")
-                                or q_item.get("link")
-                                or q_item.get("url")
-                                or q_item.get("video_url")
-                            )
-                            if matched_q:
-                                break
-            if not matched_q:
-                # Pick highest quality / first available
-                for q_item in qualities:
-                    if isinstance(q_item, dict):
-                        cand = (
-                            q_item.get("path")
-                            or q_item.get("backup_url")
-                            or q_item.get("backup_url2")
-                            or q_item.get("link")
-                            or q_item.get("url")
-                            or q_item.get("video_url")
-                        )
-                        if cand and isinstance(cand, str) and cand.strip():
-                            matched_q = cand.strip()
-                            break
-            if matched_q:
-                video_url = str(matched_q).strip()
-
-        # Fallback to direct field links
-        if not video_url:
-            for key in (
-                "download_link",
-                "file_link",
-                "download_url_higher_version",
-                "download_url_lower_version",
-                "video_player_url",
-                "link",
-                "video_url",
-                "stream_url",
-                "m3u8_url",
-                "m3u8",
-                "video",
-                "encrypted_link",
-                "encrypted_url",
-                "url",
-                "youtube_url"
-            ):
-                val = d.get(key)
-                if val and isinstance(val, str) and val.strip():
-                    val_str = val.strip()
-                    if not val_str.lower().endswith(".pdf"):
-                        video_url = val_str
-                        break
-
-        if not video_url:
-            file_val = d.get("file_url") or d.get("download_url")
-            if file_val and isinstance(file_val, str) and not file_val.lower().endswith(".pdf"):
-                video_url = file_val.strip()
-
-        # 3. Extract PDF URL
+        # 2. Extract PDF URL
         pdf_url = None
         for key in (
             "pdf_link",
@@ -227,9 +163,100 @@ class NativeMediaHelper:
                 break
 
         if not pdf_url:
-            file_val = d.get("file_url")
-            if file_val and isinstance(file_val, str) and file_val.lower().endswith(".pdf"):
+            file_val = d.get("file_url") or d.get("download_url") or d.get("link")
+            if file_val and isinstance(file_val, str) and cls._is_pdf_url(file_val):
                 pdf_url = file_val.strip()
+
+        # 3. Extract Video Stream URL
+        video_url = None
+        qualities = d.get("encrypted_links") or d.get("download_links") or d.get("qualities") or d.get("streams") or d.get("video_urls")
+        if isinstance(qualities, list) and qualities:
+            target_num = re.search(r"\d+", str(target_quality)) if target_quality else None
+            matched_q = None
+            if target_num:
+                target_val = target_num.group(0)
+                for q_item in qualities:
+                    if isinstance(q_item, dict):
+                        q_label = str(q_item.get("quality") or q_item.get("bitrate") or q_item.get("label") or q_item.get("resolution") or "")
+                        if target_val in q_label:
+                            cand = (
+                                q_item.get("path")
+                                or q_item.get("backup_url")
+                                or q_item.get("backup_url2")
+                                or q_item.get("link")
+                                or q_item.get("url")
+                                or q_item.get("video_url")
+                            )
+                            if cand and isinstance(cand, str) and not cls._is_pdf_url(cand):
+                                matched_q = cand
+                                break
+                            elif cand and isinstance(cand, str) and not pdf_url:
+                                pdf_url = cand.strip()
+            if not matched_q:
+                # Pick highest quality / first available non-PDF stream
+                for q_item in qualities:
+                    if isinstance(q_item, dict):
+                        cand = (
+                            q_item.get("path")
+                            or q_item.get("backup_url")
+                            or q_item.get("backup_url2")
+                            or q_item.get("link")
+                            or q_item.get("url")
+                            or q_item.get("video_url")
+                        )
+                        if cand and isinstance(cand, str) and cand.strip():
+                            if not cls._is_pdf_url(cand):
+                                matched_q = cand.strip()
+                                break
+                            elif not pdf_url:
+                                pdf_url = cand.strip()
+            if matched_q:
+                video_url = str(matched_q).strip()
+
+        # Fallback to direct field links (strictly ignoring PDF links)
+        if not video_url:
+            for key in (
+                "download_link",
+                "file_link",
+                "download_url_higher_version",
+                "download_url_lower_version",
+                "video_player_url",
+                "link",
+                "video_url",
+                "stream_url",
+                "m3u8_url",
+                "m3u8",
+                "video",
+                "encrypted_link",
+                "encrypted_url",
+                "url",
+                "youtube_url"
+            ):
+                val = d.get(key)
+                if val and isinstance(val, str) and val.strip():
+                    val_str = val.strip()
+                    if cls._is_pdf_url(val_str):
+                        if not pdf_url:
+                            pdf_url = val_str
+                    else:
+                        video_url = val_str
+                        break
+
+        if not video_url:
+            file_val = d.get("file_url") or d.get("download_url")
+            if file_val and isinstance(file_val, str) and file_val.strip():
+                file_val_str = file_val.strip()
+                if cls._is_pdf_url(file_val_str):
+                    if not pdf_url:
+                        pdf_url = file_val_str
+                else:
+                    video_url = file_val_str
+
+        # Safety: If video_url ended up being a PDF, reassign to pdf_url
+        if video_url and cls._is_pdf_url(video_url):
+            if not pdf_url:
+                pdf_url = video_url
+            video_url = None
 
         # 4. Metadata
         title = (
@@ -795,8 +822,11 @@ class AppxProviderAdapter:
     Adapter for APPX / ClassX / Classplus / Akamai lecture endpoints.
     Reuses original `resolve_lecture_source` and `download_appx_m3u8` from root `itsgolu.py`.
     """
+    _is_pdf_url = staticmethod(NativeMediaHelper._is_pdf_url)
 
     @classmethod
+
+
     async def resolve_and_download(
         cls,
         url: str,

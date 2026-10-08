@@ -477,8 +477,10 @@ class YouTubeAccountManager:
                         lecture_id=lecture_id,
                         youtube_video_id=yt_video_id,
                         youtube_channel_id=yt_channel_id,
-                        job_id=batch_id
+                        batch_id=batch_id,
+                        job_id=None
                     )
+
 
                 upload_result["youtube_account_id"] = account_id
                 upload_result["youtube_channel_id"] = yt_channel_id

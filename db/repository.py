@@ -938,11 +938,13 @@ class ContentRepository:
         youtube_video_id: Optional[str] = None,
         youtube_channel_id: Optional[str] = None,
         youtube_url: Optional[str] = None,
+        batch_id: Optional[str] = None,
         job_id: Optional[str] = None
     ) -> YouTubeUpload:
         now = datetime.utcnow()
         clean_url = youtube_url or (f"https://www.youtube.com/watch?v={youtube_video_id}" if youtube_video_id else None)
         upload_rec = YouTubeUpload(
+            batch_id=batch_id,
             job_id=job_id,
             lecture_id=lecture_id,
             video_id=video_id,
@@ -954,6 +956,7 @@ class ContentRepository:
             upload_completed_at=now
         )
         self.session.add(upload_rec)
+
 
         # If lecture_id is provided, also attach/update Video record on the lecture
         if lecture_id and youtube_video_id:

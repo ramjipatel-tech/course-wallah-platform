@@ -1,6 +1,8 @@
 import os
 import logging
+from datetime import datetime
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -81,6 +83,27 @@ async def health_check():
         "version": "1.0.0",
         "security_test_mode": SECURITY_TEST_MODE
     }
+
+@app.get("/api/logs")
+@app.get("/api/v1/logs")
+async def public_logs_alias(limit: int = 200, level: str = None, category: str = None, search: str = None):
+    from config.logger_buffer import GLOBAL_LOG_HANDLER
+    logs = GLOBAL_LOG_HANDLER.get_logs(limit=min(limit, 1000), level=level, category=category, search=search)
+    return {"status": "success", "summary": GLOBAL_LOG_HANDLER.get_summary(), "logs": logs}
+
+@app.get("/api/diagnostics")
+@app.get("/api/v1/diagnostics")
+async def public_diagnostics_alias():
+    from config.logger_buffer import GLOBAL_LOG_HANDLER
+    from engines.youtube_account_manager import YouTubeAccountManager
+    yt_diag = await YouTubeAccountManager.get_diagnostics()
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "summary": GLOBAL_LOG_HANDLER.get_summary(),
+        "youtube": yt_diag
+    }
+
 
 # SPA Entrypoint fallback
 @app.get("/{full_path:path}")

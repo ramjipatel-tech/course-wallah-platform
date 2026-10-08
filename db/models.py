@@ -439,7 +439,8 @@ class YouTubeUpload(Base):
     __tablename__ = "youtube_uploads"
 
     id = Column(String(64), primary_key=True, default=generate_uuid)
-    job_id = Column(String(64), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    batch_id = Column(String(64), ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True)
+    job_id = Column(String(64), nullable=True, index=True)
     lecture_id = Column(String(64), ForeignKey("lectures.id", ondelete="SET NULL"), nullable=True, index=True)
     video_id = Column(String(64), ForeignKey("videos.id", ondelete="SET NULL"), nullable=True, index=True)
     account_id = Column(String(64), ForeignKey("youtube_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -454,6 +455,8 @@ class YouTubeUpload(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     account = relationship("YouTubeAccount", back_populates="uploads")
+    batch = relationship("Batch")
+
 
 
 

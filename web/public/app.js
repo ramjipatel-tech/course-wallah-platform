@@ -235,12 +235,16 @@ async function handleRoute() {
       case 'developer':
         renderDeveloperView(root);
         break;
+      case 'logs':
+        renderLogsView(root);
+        break;
       case 'help-center':
         renderHelpCenterView(root);
         break;
       default:
         await renderHomeView(root);
     }
+
   } catch (err) {
     console.error('Route rendering error:', err);
     root.innerHTML = `<div class="error-card" style="background:var(--bg-card); padding:32px; border-radius:20px; text-align:center; border: 1px solid var(--border-subtle);"><h3 style="color:var(--accent-rose); margin-bottom:8px;">Failed to load content</h3><p style="color:var(--text-secondary); margin-bottom:16px;">${err.message || 'An unexpected error occurred.'}</p><button class="btn-hero-primary" onclick="handleRoute()">Retry</button></div>`;
@@ -1366,3 +1370,363 @@ function toggleBookmark(id, title) {
   }
   localStorage.setItem('cw_bookmarks', JSON.stringify(state.bookmarks));
 }
+
+
+// ==============================================================================
+// 12. REAL-TIME LIVE LOGS & DIAGNOSTICS CONSOLE
+// ==============================================================================
+
+let logState = {
+  logs: [],
+  summary: { total_logs: 0, error_count: 0, warning_count: 0, youtube_events: 0, download_events: 0 },
+  diagnostics: null,
+  activeFilter: 'ALL',
+  searchQuery: '',
+  autoScroll: true,
+  isStreaming: true,
+  timerId: null,
+  lastSinceId: 0
+};
+
+async function renderLogsView(container) {
+  // Clear any existing polling timer
+  if (logState.timerId) {
+    clearInterval(logState.timerId);
+    logState.timerId = null;
+  }
+
+  container.innerHTML = `
+    <div class="logs-console-wrapper">
+      
+      <!-- Diagnostic Telemetry Overview -->
+      <div class="logs-header-card">
+        <div class="logs-title-row">
+          <div class="logs-title-wrap">
+            <div class="logs-icon-pulse">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </div>
+            <div>
+              <h1 class="logs-main-title">Live Diagnostic &amp; Operational Console</h1>
+              <p class="logs-subtitle">Real-time system telemetry, YouTube failover router, AppX streams, and background workers.</p>
+            </div>
+          </div>
+          <div class="logs-status-pills">
+            <div class="status-pill-live" id="stream-live-indicator">
+              <span class="live-dot"></span>
+              <span id="stream-status-text">LIVE STREAMING</span>
+            </div>
+            <button class="btn-refresh-logs" onclick="fetchLiveLogs(true)" title="Force Refresh">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="logs-metrics-grid">
+          <div class="log-metric-card" style="border-left: 4px solid #6366F1;">
+            <span class="log-metric-label">TOTAL LOGS</span>
+            <span class="log-metric-value" id="metric-total-logs">0</span>
+            <span class="log-metric-sub">Ring Buffer: 2,500</span>
+          </div>
+          <div class="log-metric-card" style="border-left: 4px solid #EF4444;">
+            <span class="log-metric-label">ERRORS / FAULTS</span>
+            <span class="log-metric-value" id="metric-errors" style="color:#EF4444;">0</span>
+            <span class="log-metric-sub" id="metric-error-sub">Auto-recovered</span>
+          </div>
+          <div class="log-metric-card" style="border-left: 4px solid #F59E0B;">
+            <span class="log-metric-label">WARNINGS / RETRIES</span>
+            <span class="log-metric-value" id="metric-warnings" style="color:#F59E0B;">0</span>
+            <span class="log-metric-sub">Managed Handshakes</span>
+          </div>
+          <div class="log-metric-card" style="border-left: 4px solid #EC4899;">
+            <span class="log-metric-label">YOUTUBE UPLOADS</span>
+            <span class="log-metric-value" id="metric-yt-events" style="color:#EC4899;">0</span>
+            <span class="log-metric-sub" id="metric-yt-sub">Multi-Channel Active</span>
+          </div>
+          <div class="log-metric-card" style="border-left: 4px solid #06B6D4;">
+            <span class="log-metric-label">MEDIA DOWNLOADS</span>
+            <span class="log-metric-value" id="metric-dl-events" style="color:#06B6D4;">0</span>
+            <span class="log-metric-sub">HLS / Native yt-dlp</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Human-Readable Diagnosis & Quick Fix Banner -->
+      <div id="logs-diagnostic-guidance" class="diagnostic-guidance-card hidden">
+        <div class="guidance-icon">💡</div>
+        <div class="guidance-content">
+          <h4 class="guidance-title">System Auto-Recovery &amp; Diagnostic Hints</h4>
+          <div id="guidance-hints-list" class="guidance-hints-list"></div>
+        </div>
+      </div>
+
+      <!-- Terminal Toolbar Controls -->
+      <div class="terminal-toolbar">
+        <div class="terminal-filters-left">
+          <button class="terminal-filter-btn active" data-filter="ALL" onclick="setLogFilter('ALL')">🌟 All Logs</button>
+          <button class="terminal-filter-btn filter-error" data-filter="ERROR" onclick="setLogFilter('ERROR')">🚨 Errors</button>
+          <button class="terminal-filter-btn filter-warning" data-filter="WARNING" onclick="setLogFilter('WARNING')">⚠️ Warnings</button>
+          <button class="terminal-filter-btn filter-youtube" data-filter="YOUTUBE" onclick="setLogFilter('YOUTUBE')">▶️ YouTube</button>
+          <button class="terminal-filter-btn filter-download" data-filter="DOWNLOAD" onclick="setLogFilter('DOWNLOAD')">📥 Downloads</button>
+          <button class="terminal-filter-btn filter-pdf" data-filter="PDF" onclick="setLogFilter('PDF')">📄 Notes / PDFs</button>
+          <button class="terminal-filter-btn filter-system" data-filter="SYSTEM" onclick="setLogFilter('SYSTEM')">⚙️ System</button>
+        </div>
+
+        <div class="terminal-controls-right">
+          <div class="terminal-search-wrap">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="terminal-search-input" placeholder="Search logs, URLs, tags..." oninput="handleLogSearch(this.value)">
+          </div>
+          <button class="btn-terminal-action" id="btn-toggle-stream" onclick="toggleLogStreaming()" title="Pause/Resume Stream">
+            <span id="toggle-stream-icon">⏸️</span>
+            <span id="toggle-stream-text">Pause</span>
+          </button>
+          <button class="btn-terminal-action" id="btn-toggle-autoscroll" onclick="toggleLogAutoScroll()" title="Pin to Latest Logs">
+            <span id="autoscroll-icon">📌</span>
+            <span>Pin Bottom</span>
+          </button>
+          <button class="btn-terminal-action" onclick="copyTerminalLogs()" title="Copy all filtered logs">
+            📋 Copy Logs
+          </button>
+          <button class="btn-terminal-action btn-terminal-clear" onclick="clearTerminalLogs()" title="Clear Terminal View">
+            🧹 Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- Cyberpunk Log Stream Terminal -->
+      <div class="terminal-container" id="terminal-container">
+        <div class="terminal-topbar">
+          <div class="terminal-window-dots">
+            <span class="dot-red"></span>
+            <span class="dot-yellow"></span>
+            <span class="dot-green"></span>
+          </div>
+          <div class="terminal-window-title">course_wallah_platform@production:~# journalctl -u supervisor -f</div>
+          <div class="terminal-entry-count" id="terminal-count-badge">0 visible events</div>
+        </div>
+        <div class="terminal-body" id="terminal-body">
+          <div class="terminal-loading">Connecting to real-time logs stream...</div>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Initialize data fetch
+  await fetchLiveLogs(true);
+
+  // Start continuous polling every 2500ms
+  logState.timerId = setInterval(() => {
+    if (logState.isStreaming && window.location.search.includes('tab=logs')) {
+      fetchLiveLogs(false);
+    }
+  }, 2500);
+}
+
+async function fetchLiveLogs(isForce = false) {
+  try {
+    const res = await fetch('/api/admin/logs?limit=400');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      logState.logs = data.logs || [];
+      logState.summary = data.summary || {};
+      
+      updateLogMetrics();
+      renderTerminalLogs();
+      updateDiagnosticsGuidance();
+    }
+  } catch (err) {
+    console.debug('Failed to poll logs:', err);
+  }
+}
+
+function updateLogMetrics() {
+  const sum = logState.summary;
+  const elTotal = document.getElementById('metric-total-logs');
+  const elErr = document.getElementById('metric-errors');
+  const elWarn = document.getElementById('metric-warnings');
+  const elYt = document.getElementById('metric-yt-events');
+  const elDl = document.getElementById('metric-dl-events');
+
+  if (elTotal) elTotal.innerText = sum.total_logs || 0;
+  if (elErr) elErr.innerText = sum.error_count || 0;
+  if (elWarn) elWarn.innerText = sum.warning_count || 0;
+  if (elYt) elYt.innerText = sum.youtube_events || 0;
+  if (elDl) elDl.innerText = sum.download_events || 0;
+}
+
+function updateDiagnosticsGuidance() {
+  const guidanceCard = document.getElementById('logs-diagnostic-guidance');
+  const hintsList = document.getElementById('guidance-hints-list');
+  if (!guidanceCard || !hintsList) return;
+
+  const activeHints = [];
+  const seen = new Set();
+
+  logState.logs.forEach(l => {
+    if (l.hint && !seen.has(l.hint)) {
+      seen.add(l.hint);
+      activeHints.push({ hint: l.hint, level: l.level, tag: l.tag });
+    }
+  });
+
+  if (activeHints.length > 0) {
+    guidanceCard.classList.remove('hidden');
+    hintsList.innerHTML = activeHints.map(h => `
+      <div class="guidance-hint-item">
+        <span class="hint-badge hint-badge-${h.level.toLowerCase()}">[${h.tag}]</span>
+        <span class="hint-text">${h.hint}</span>
+      </div>
+    `).join('');
+  } else {
+    guidanceCard.classList.add('hidden');
+  }
+}
+
+function renderTerminalLogs() {
+  const body = document.getElementById('terminal-body');
+  const countBadge = document.getElementById('terminal-count-badge');
+  if (!body) return;
+
+  const filter = logState.activeFilter;
+  const search = (logState.searchQuery || '').toLowerCase().trim();
+
+  let filtered = logState.logs;
+
+  if (filter !== 'ALL') {
+    if (filter === 'ERROR') {
+      filtered = filtered.filter(l => l.level === 'ERROR' || l.level === 'CRITICAL');
+    } else if (filter === 'WARNING') {
+      filtered = filtered.filter(l => l.level === 'WARNING');
+    } else {
+      filtered = filtered.filter(l => l.category === filter);
+    }
+  }
+
+  if (search) {
+    filtered = filtered.filter(l => 
+      (l.message || '').toLowerCase().includes(search) ||
+      (l.tag || '').toLowerCase().includes(search) ||
+      (l.category || '').toLowerCase().includes(search)
+    );
+  }
+
+  if (countBadge) {
+    countBadge.innerText = `${filtered.length} visible / ${logState.logs.length} total`;
+  }
+
+  if (filtered.length === 0) {
+    body.innerHTML = `<div class="terminal-empty">No log records matched filter "${filter}" ${search ? `with query "${search}"` : ''}</div>`;
+    return;
+  }
+
+  body.innerHTML = filtered.map(l => {
+    const lvlClass = `log-lvl-${(l.level || 'info').toLowerCase()}`;
+    const tagClass = `log-tag-${(l.category || 'system').toLowerCase()}`;
+    
+    // Highlight important tokens like URLs, IDs, outcomes
+    let safeMsg = escapeHtml(l.message || '');
+    safeMsg = safeMsg.replace(/(\bhttps?:\/\/[^\s]+)/g, '<span class="log-hl-url">$1</span>');
+    safeMsg = safeMsg.replace(/(lecture_index=#[0-9]+)/g, '<span class="log-hl-lec">$1</span>');
+    safeMsg = safeMsg.replace(/(status=SUCCESS|UPLOADED|SUCCESS|completed)/gi, '<span class="log-hl-success">$1</span>');
+    safeMsg = safeMsg.replace(/(failed|error|violation|exit 8|HTTP 401)/gi, '<span class="log-hl-error">$1</span>');
+    safeMsg = safeMsg.replace(/(Account '[^']+')/g, '<span class="log-hl-acc">$1</span>');
+
+    return `
+      <div class="terminal-row ${lvlClass}" onclick="copySingleLogLine(this)" title="Click to copy log line">
+        <span class="log-time">${l.timestamp}</span>
+        <span class="log-level-pill ${lvlClass}">[${l.level}]</span>
+        <span class="log-tag-pill ${tagClass}">[${l.tag || 'SYS'}]</span>
+        <span class="log-msg-content">${safeMsg}</span>
+      </div>
+    `;
+  }).join('');
+
+  if (logState.autoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function setLogFilter(filter) {
+  logState.activeFilter = filter;
+  document.querySelectorAll('.terminal-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+  });
+  renderTerminalLogs();
+}
+
+function handleLogSearch(val) {
+  logState.searchQuery = val;
+  renderTerminalLogs();
+}
+
+function toggleLogStreaming() {
+  logState.isStreaming = !logState.isStreaming;
+  const icon = document.getElementById('toggle-stream-icon');
+  const text = document.getElementById('toggle-stream-text');
+  const statusIndicator = document.getElementById('stream-live-indicator');
+  const statusText = document.getElementById('stream-status-text');
+
+  if (logState.isStreaming) {
+    if (icon) icon.innerText = '⏸️';
+    if (text) text.innerText = 'Pause';
+    if (statusIndicator) statusIndicator.className = 'status-pill-live';
+    if (statusText) statusText.innerText = 'LIVE STREAMING';
+    fetchLiveLogs(true);
+    showToast('Live stream resumed');
+  } else {
+    if (icon) icon.innerText = '▶️';
+    if (text) text.innerText = 'Resume';
+    if (statusIndicator) statusIndicator.className = 'status-pill-paused';
+    if (statusText) statusText.innerText = 'STREAM PAUSED';
+    showToast('Live stream paused');
+  }
+}
+
+function toggleLogAutoScroll() {
+  logState.autoScroll = !logState.autoScroll;
+  const btn = document.getElementById('btn-toggle-autoscroll');
+  if (btn) {
+    btn.classList.toggle('active', logState.autoScroll);
+  }
+  showToast(logState.autoScroll ? 'Auto-scroll pinned to bottom' : 'Auto-scroll disabled');
+}
+
+function copyTerminalLogs() {
+  const body = document.getElementById('terminal-body');
+  if (!body) return;
+  const text = Array.from(body.querySelectorAll('.terminal-row')).map(r => r.innerText).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied visible logs to clipboard! 📋');
+  }).catch(() => {
+    showToast('Failed to copy logs');
+  });
+}
+
+function copySingleLogLine(el) {
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText).then(() => {
+    showToast('Log line copied to clipboard! 📋');
+  });
+}
+
+function clearTerminalLogs() {
+  const body = document.getElementById('terminal-body');
+  if (body) {
+    body.innerHTML = '<div class="terminal-empty">Terminal view cleared. Waiting for next event...</div>';
+  }
+  showToast('Terminal view cleared');
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+

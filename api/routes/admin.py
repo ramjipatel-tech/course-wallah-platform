@@ -5,10 +5,13 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Body, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.orm import selectinload
+
+from config.logger_buffer import GLOBAL_LOG_HANDLER
 
 from db.connection import get_db_dependency
 from db.models import (
@@ -961,5 +964,75 @@ async def delete_support_ticket(
     await db.delete(ticket)
     await db.flush()
     return {"status": "success", "message": "Ticket deleted"}
+
+
+# ==========================================
+# REAL-TIME DIAGNOSTIC & LOGS CONSOLE
+# ==========================================
+
+@router.get("/logs")
+async def get_admin_system_logs(
+    limit: int = 200,
+    level: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    since_id: Optional[int] = None
+):
+    """
+    Returns real-time structured system and operational logs for the diagnostic console.
+    """
+    logs = GLOBAL_LOG_HANDLER.get_logs(
+        limit=min(limit, 1000),
+        level=level,
+        category=category,
+        search=search,
+        since_id=since_id
+    )
+    summary = GLOBAL_LOG_HANDLER.get_summary()
+    return {
+        "status": "success",
+        "summary": summary,
+        "logs": logs
+    }
+
+@router.delete("/logs")
+async def clear_admin_system_logs(
+    admin: dict = Depends(require_admin_auth)
+):
+    """Clears in-memory log buffer."""
+    GLOBAL_LOG_HANDLER.clear()
+    return {"status": "success", "message": "In-memory logs buffer cleared"}
+
+@router.get("/diagnostics")
+async def get_system_diagnostics(
+    db: AsyncSession = Depends(get_db_dependency)
+):
+    """Consolidated system health and failover diagnostics."""
+    summary = GLOBAL_LOG_HANDLER.get_summary()
+    yt_diag = await YouTubeAccountManager.get_diagnostics()
+    
+    active_jobs_count = (await db.execute(
+        select(func.count(Job.id)).where(Job.status.in_([JobStatus.QUEUED, JobStatus.PROCESSING]))
+    )).scalar() or 0
+
+    total_lectures = (await db.execute(select(func.count(Lecture.id)))).scalar() or 0
+    total_videos = (await db.execute(select(func.count(Video.id)))).scalar() or 0
+    total_pdfs = (await db.execute(select(func.count(PDF.id)))).scalar() or 0
+    total_batches = (await db.execute(select(func.count(Batch.id)))).scalar() or 0
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "log_summary": summary,
+        "active_jobs": active_jobs_count,
+        "stats": {
+            "total_batches": total_batches,
+            "total_lectures": total_lectures,
+            "total_videos": total_videos,
+            "total_pdfs": total_pdfs
+        },
+        "youtube": yt_diag
+    }
+
 
 
