@@ -923,9 +923,9 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
-  const isDirectHls = Boolean(access.stream_url);
   const isEmbed = Boolean(access.embed_url);
-  const hasYouTube = Boolean(access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const isDirectHls = Boolean(!isEmbed && access.stream_url);
+  const hasYouTube = Boolean(!isEmbed && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
@@ -967,19 +967,19 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
       <!-- Sleek Tablet Frame (Exact AS Multiverse Match) -->
       <div class="as-video-tablet-frame">
         <div class="as-video-inner-wrap" id="player-container">
-          ${isDirectHls ? `
-            <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
-              <source src="${access.stream_url}" type="application/x-mpegURL" />
-            </video>
-          ` : (isEmbed ? `
+          ${isEmbed ? `
             <iframe
               src="${access.embed_url}"
               class="vcdn-iframe-player"
               allowfullscreen
               allowtransparency
-              allow="autoplay; fullscreen"
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               style="width:100%; height:100%; min-height:480px; border:0; border-radius:12px; background:#000;"
             ></iframe>
+          ` : (isDirectHls ? `
+            <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
+              <source src="${access.stream_url}" type="application/x-mpegURL" />
+            </video>
           ` : (hasYouTube ? `
             <div class="plyr__video-embed" id="cw-plyr-element">
               <iframe
@@ -1106,9 +1106,11 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
     </div>
   `;
 
-  // Initialize Plyr instance
+  // Initialize Plyr instance if direct HLS or YouTube
   setTimeout(() => {
-    initPlyr(access.stream_url);
+    if (isDirectHls || hasYouTube) {
+      initPlyr(access.stream_url);
+    }
   }, 100);
 }
 

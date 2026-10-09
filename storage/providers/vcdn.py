@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import logging
 import asyncio
@@ -42,8 +43,8 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
             enabled=VCDN_ENABLED if enabled is None else enabled,
             priority=priority,
         )
-        self.api_key = (api_key or VCDN_API_KEY or "").strip()
-        self.base_url = (base_url or VCDN_BASE_URL or "https://cdn.vcdn.me").strip().rstrip("/")
+        self.api_key = re.sub(r"[\r\n\t\s]+", "", str(api_key or VCDN_API_KEY or ""))
+        self.base_url = re.sub(r"[\r\n\t\s]+", "", str(base_url or VCDN_BASE_URL or "https://cdn.vcdn.me")).rstrip("/")
         self.ladder_profile = VCDN_LADDER_PROFILE or "standard"
         self.verify_timeout = verify_timeout or STORAGE_VERIFY_TIMEOUT or 60
 

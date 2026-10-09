@@ -104,18 +104,25 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     video = lecture.video
     has_storage_video = False
     embed_url = None
+    hls_url = None
+    playback_url = None
     storage_provider = None
 
     if video and video.storages:
         for st in video.storages:
-            if st.status == VideoStorageStatus.READY.value and st.embed_url:
-                embed_url = st.embed_url
+            if st.status in ("READY", VideoStorageStatus.READY.value):
+                if st.embed_url:
+                    embed_url = st.embed_url.strip()
+                if st.hls_url:
+                    hls_url = st.hls_url.strip()
+                if st.playback_url:
+                    playback_url = st.playback_url.strip()
                 storage_provider = st.provider
                 has_storage_video = True
                 break
 
     is_yt_valid = bool(video and video.youtube_video_id and not video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")))
-    has_video = is_yt_valid or bool(lecture.source_url) or has_storage_video
+    has_video = is_yt_valid or has_storage_video or bool(lecture.source_url)
 
     if not has_video:
         return {
@@ -124,8 +131,13 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
             "message": "This lecture contains study material only or video is being prepared."
         }
 
+    # Only provide direct stream_url if storage gave a direct HLS / mp4 link or as fallback when no embed
     stream_url = None
-    if lecture.source_url and any(lecture.source_url.lower().endswith(ext) or ext in lecture.source_url.lower() for ext in (".m3u8", ".mp4", "transcoded-videos", "liveclasses", "stream", "vcdn")):
+    if hls_url:
+        stream_url = hls_url
+    elif playback_url:
+        stream_url = playback_url
+    elif not embed_url and not is_yt_valid and lecture.source_url and any(lecture.source_url.lower().endswith(ext) for ext in (".m3u8", ".mp4")):
         stream_url = lecture.source_url
 
     pdf_url = lecture.source_pdf_url or (f"/api/v1/pdfs/{lecture.id}/content" if lecture.pdf else None)
