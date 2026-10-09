@@ -20,7 +20,7 @@ from config.settings import (
 )
 from db.connection import get_db_session
 from db.repository import ContentRepository, slugify
-from db.models import JobStatus, PublicationStatus
+from db.models import JobStatus, PublicationStatus, VideoStorageStatus
 from parsers.indexer import NormalizedLecture, NormalizedFolder, NormalizedSubject, NormalizedBatchTree
 from providers.downloader import MediaDownloader, VideoUnavailableError
 from providers.adapters import sanitize_url_for_logging
@@ -190,16 +190,33 @@ class ContentProcessingEngine:
                 controller.skipped_count += 1
                 continue
 
-            # Check if lecture is already PUBLISHED in DB with media
+            # Check if lecture is already PUBLISHED in DB with verified media
             async with get_db_session() as db_sess:
                 repo = ContentRepository(db_sess)
                 existing_lec = await repo.get_lecture_by_index(batch_id, item.index)
                 if existing_lec and existing_lec.publication_status == PublicationStatus.PUBLISHED:
-                    # Verified published: skip re-download
-                    logger.info(f"[LECTURE_SKIPPED] #{item.index} '{item.title}' is already published.")
-                    controller.skipped_count += 1
-                    controller.completed_count += 1
-                    continue
+                    has_verified_media = False
+                    if YOUTUBE_ENABLED:
+                        if existing_lec.video and existing_lec.video.youtube_video_id and not existing_lec.video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")):
+                            has_verified_media = True
+                    else:
+                        if existing_lec.video and existing_lec.video.storages:
+                            ready_storages = [s for s in existing_lec.video.storages if s.status in ("READY", VideoStorageStatus.READY.value)]
+                            if ready_storages:
+                                has_verified_media = True
+                        if not has_verified_media and existing_lec.video and existing_lec.video.youtube_video_id and not existing_lec.video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")):
+                            has_verified_media = True
+                        if not has_verified_media and not item.video_url and existing_lec.has_pdf and existing_lec.pdf:
+                            has_verified_media = True
+
+                    if has_verified_media:
+                        # Verified published: skip re-download
+                        logger.info(f"[LECTURE_SKIPPED] #{item.index} '{item.title}' is already published with verified media.")
+                        controller.skipped_count += 1
+                        controller.completed_count += 1
+                        continue
+                    else:
+                        logger.info(f"[INCOMPLETE_LECTURE_RETRY] #{item.index} '{item.title}' marked PUBLISHED but lacks verified ready storage. Re-processing...")
 
             # Process single lecture
             try:
@@ -451,23 +468,42 @@ class ContentProcessingEngine:
                 has_valid_checkpoint = True
                 logger.info(f"[CHECKPOINT_RESUMED] lecture_index=#{item.index} Reusing prepared watermarked artifact: {watermarked_video_path}")
 
-            # Check DB if lecture was already processed and uploaded in a previous run
+            # Check DB if lecture was already processed, uploaded, and published in a previous run
             is_already_uploaded = False
             async with get_db_session() as chk_s:
                 chk_repo = ContentRepository(chk_s)
                 existing_lec = await chk_repo.get_lecture_by_index(batch_id, item.index)
-                if existing_lec and existing_lec.video and existing_lec.video.youtube_video_id:
-                    youtube_video_id = existing_lec.video.youtube_video_id
-                    youtube_channel_id = existing_lec.video.youtube_channel_id
-                    youtube_account_id = existing_lec.video.youtube_account_id
-                    youtube_url = existing_lec.video.youtube_url
-                    is_already_uploaded = True
-                    phase_states["download"] = "✅"
-                    phase_states["watermark"] = "✅"
-                    phase_states["thumbnail"] = "✅"
-                    phase_states["youtube"] = "✅"
-                    logger.info(f"[ALREADY_PROCESSED] lecture_index=#{item.index} title='{item.title}' ALREADY uploaded to YouTube -> ID: {youtube_video_id}. Auto-skipping download & upload!")
-                    await _update_telegram_ui(f"Lecture #{item.index} already uploaded ({youtube_video_id}) - auto-skipped.", dl_pct=100.0, yt_pct=100.0)
+                if existing_lec and existing_lec.publication_status == PublicationStatus.PUBLISHED:
+                    if YOUTUBE_ENABLED:
+                        if existing_lec.video and existing_lec.video.youtube_video_id and not existing_lec.video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")):
+                            youtube_video_id = existing_lec.video.youtube_video_id
+                            youtube_channel_id = existing_lec.video.youtube_channel_id
+                            youtube_account_id = existing_lec.video.youtube_account_id
+                            youtube_url = existing_lec.video.youtube_url
+                            is_already_uploaded = True
+                    else:
+                        if existing_lec.video and existing_lec.video.storages:
+                            ready_storages = [s for s in existing_lec.video.storages if s.status in ("READY", VideoStorageStatus.READY.value)]
+                            if ready_storages:
+                                is_already_uploaded = True
+                        if not is_already_uploaded and existing_lec.video and existing_lec.video.youtube_video_id and not existing_lec.video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")):
+                            youtube_video_id = existing_lec.video.youtube_video_id
+                            youtube_channel_id = existing_lec.video.youtube_channel_id
+                            youtube_account_id = existing_lec.video.youtube_account_id
+                            youtube_url = existing_lec.video.youtube_url
+                            is_already_uploaded = True
+                        if not is_already_uploaded and not item.video_url and existing_lec.has_pdf and existing_lec.pdf:
+                            is_already_uploaded = True
+
+                    if is_already_uploaded:
+                        phase_states["download"] = "✅"
+                        phase_states["watermark"] = "✅"
+                        phase_states["thumbnail"] = "✅"
+                        phase_states["youtube"] = "✅" if (YOUTUBE_ENABLED or youtube_video_id) else "⏭️"
+                        logger.info(f"[ALREADY_PROCESSED] lecture_index=#{item.index} title='{item.title}' is PUBLISHED with verified media. Auto-skipping download & upload!")
+                        await _update_telegram_ui(f"Lecture #{item.index} already published - auto-skipped.", dl_pct=100.0, yt_pct=100.0)
+                elif existing_lec:
+                    logger.info(f"[INCOMPLETE_LECTURE_DETECTED] lecture_index=#{item.index} title='{item.title}' status={existing_lec.publication_status} (NOT PUBLISHED). Re-processing media...")
 
             if is_already_uploaded:
                 pass # Already uploaded, will proceed to check PDF/DB

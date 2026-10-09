@@ -795,6 +795,9 @@ def register_handlers(app: Client):
                     f"🎓 <b>COURSE WALLAH COMMAND REFERENCE</b>\n\n"
                     f"<b>👑 Batch & Ingestion Commands:</b>\n"
                     f"• /batch or /uploadbatch — Start TXT course batch ingestion wizard\n"
+                    f"• /batches — List all batches & their publication status\n"
+                    f"• /publish_batch &lt;id&gt; — Force publish batch to student website\n"
+                    f"• /reprocess_batch &lt;id&gt; — Re-download & process incomplete lectures\n"
                     f"• /batchstatus — View live batch processing progress\n"
                     f"• /batchjobs — View recent database jobs\n"
                     f"• /batchpause — Pause current batch safely\n"
@@ -1042,6 +1045,201 @@ def register_handlers(app: Client):
         except Exception as exc:
             logger.exception("Error in /batchlogs command: %s", exc)
             await message.reply_text("❌ Failed to load batch logs.")
+
+    @app.on_message(filters.command(["batches", "list_batches"]) & filters.private)
+    async def cmd_batches(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            async with get_db_session() as session:
+                repo = ContentRepository(session)
+                batches = await repo.get_all_batches()
+                if not batches:
+                    await message.reply_text("📁 <b>No batches found in database.</b> Upload a .txt file with /batch to get started.")
+                    return
+
+                lines = ["📚 <b>COURSE WALLAH BATCHES:</b>\n━━━━━━━━━━━━━━━━━━━━"]
+                for b in batches[:25]:
+                    summary = await repo.get_batch_lecture_summary(b.id)
+                    app_name = b.app.name if b.app else "App"
+                    tot = summary["total_lectures"]
+                    pub = summary["published_lectures"]
+                    vid = summary["videos_count"]
+                    pdf = summary["pdfs_count"]
+                    status_emoji = "🟢" if pub == tot and tot > 0 else ("🟡" if pub > 0 else "🔴")
+                    lines.append(
+                        f"{status_emoji} <b>{b.name}</b> (<code>{b.slug}</code>)\n"
+                        f"   📁 App: <b>{app_name}</b> | ID: <code>{b.id}</code>\n"
+                        f"   📊 Published: <b>{pub}/{tot}</b> | 🎥 Videos: <b>{vid}</b> | 📄 PDFs: <b>{pdf}</b>\n"
+                        f"   👉 <i>/publish_batch {b.id}</i> | <i>/reprocess_batch {b.id}</i>\n"
+                    )
+
+                text = "\n".join(lines)
+                if len(text) > 4000:
+                    text = text[:3900] + "\n\n<i>...and more batches.</i>"
+                await message.reply_text(text)
+        except Exception as exc:
+            logger.exception("Error in /batches command: %s", exc)
+            await message.reply_text("❌ Failed to list batches.")
+
+    @app.on_message(filters.command(["publish_batch", "publish"]) & filters.private)
+    async def cmd_publish_batch(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            if len(message.command) < 2:
+                await message.reply_text(
+                    "ℹ️ <b>Usage:</b> <code>/publish_batch &lt;batch_id_or_slug&gt;</code>\n\n"
+                    "Publishes all existing valid lectures in a batch and ensures they are visible on the website."
+                )
+                return
+
+            batch_query = " ".join(message.command[1:]).strip()
+            async with get_db_session() as session:
+                repo = ContentRepository(session)
+                batch = await repo.get_batch_by_id_or_slug(batch_query)
+                if not batch:
+                    await message.reply_text(f"❌ <b>Batch not found:</b> <code>{batch_query}</code>")
+                    return
+
+                res = await repo.publish_all_batch_lectures(batch.id, force_all=False)
+                await message.reply_text(
+                    f"✅ <b>BATCH PUBLISHED SUCCESSFULLY!</b>\n\n"
+                    f"📚 <b>Batch:</b> {batch.name}\n"
+                    f"🆔 <b>Batch ID:</b> <code>{batch.id}</code>\n"
+                    f"🚀 <b>Newly Published:</b> {res['published']}/{res['total']} lectures\n"
+                    f"🌐 <b>Website Status:</b> Now live and viewable by students!"
+                )
+        except Exception as exc:
+            logger.exception("Error in /publish_batch command: %s", exc)
+            await message.reply_text("❌ Failed to publish batch.")
+
+    @app.on_message(filters.command(["reprocess_batch", "retry_batch"]) & filters.private)
+    async def cmd_reprocess_batch(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            if len(message.command) < 2:
+                # Check if there is an active/cached batch session first
+                state = BatchWizardManager.get_session(processing_engine.bot_id, user_id) or _last_batch_sessions_by_user.get(user_id)
+                if state and state.tree:
+                    state.retry_failed_only = True
+                    state.execution_mode = "REPROCESS INCOMPLETE"
+                    status_msg = await message.reply_text("🔄 <b>Retrying incomplete & failed items in batch...</b>")
+                    asyncio.create_task(launch_batch_execution(client, status_msg, state))
+                    return
+                await message.reply_text("ℹ️ <b>Usage:</b> <code>/reprocess_batch &lt;batch_id_or_slug&gt;</code>")
+                return
+
+            batch_query = " ".join(message.command[1:]).strip()
+            async with get_db_session() as session:
+                repo = ContentRepository(session)
+                batch = await repo.get_batch_by_id_or_slug(batch_query)
+                if not batch:
+                    await message.reply_text(f"❌ <b>Batch not found:</b> <code>{batch_query}</code>")
+                    return
+
+                # Check cached session by batch ID
+                cached_state = _last_batch_sessions_by_batch.get(batch.id)
+                if cached_state and cached_state.tree:
+                    cached_state.retry_failed_only = True
+                    cached_state.execution_mode = "REPROCESS INCOMPLETE"
+                    status_msg = await message.reply_text(f"🔄 <b>Retrying incomplete items for '{batch.name}'...</b>")
+                    asyncio.create_task(launch_batch_execution(client, status_msg, cached_state))
+                    return
+
+                # Reconstruct tree from DB lectures
+                lectures = await repo.get_lectures_by_batch(batch.id)
+                if not lectures:
+                    await message.reply_text(f"⚠️ No lectures found in database for batch '{batch.name}'.")
+                    return
+
+                # Check how many are unpublished / failed
+                failed_lecs = [l for l in lectures if l.publication_status != PublicationStatus.PUBLISHED]
+                if not failed_lecs:
+                    # Also check if any published lectures lack media
+                    lacking_media = []
+                    for l in lectures:
+                        has_ready = False
+                        if l.video and l.video.storages:
+                            if any(s.status in ("READY", "ready") for s in l.video.storages):
+                                has_ready = True
+                        elif l.video and l.video.youtube_video_id and not l.video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")):
+                            has_ready = True
+                        elif not l.has_video and l.has_pdf and l.pdf:
+                            has_ready = True
+                        if not has_ready:
+                            lacking_media.append(l)
+                    failed_lecs.extend(lacking_media)
+
+                if not failed_lecs:
+                    await message.reply_text(
+                        f"🎉 <b>All {len(lectures)} lectures in '{batch.name}' are already fully published and verified!</b>\n\n"
+                        f"If you want to force publish all, use <code>/publish_batch {batch.id}</code>."
+                    )
+                    return
+
+                # Build normalized batch tree from DB items
+                raw_lines = []
+                for l in lectures:
+                    subj_name = l.subject.name if l.subject else "Subject"
+                    folder_name = l.folder.name if l.folder else "Folder"
+                    v_url = l.source_url or ""
+                    p_url = l.source_pdf_url or ""
+                    line = f"{subj_name} / {folder_name} : {l.title} : {v_url}"
+                    if p_url:
+                        line += f" | {p_url}"
+                    raw_lines.append(line)
+
+                reconstructed_tree = TxtIndexer.index_txt(
+                    file_content="\n".join(raw_lines),
+                    filename=f"{batch.name}.txt",
+                    app_name=batch.app.name if batch.app else "Course Wallah",
+                    batch_override=batch.name
+                )
+                app_name = batch.app.name if batch.app else "Course Wallah"
+
+                reprocess_state = BatchWizardState(
+                    bot_id=processing_engine.bot_id,
+                    user_id=user_id,
+                    tree=reconstructed_tree,
+                    app_id=batch.app_id,
+                    app_name=app_name,
+                    batch_id=batch.id,
+                    batch_name=batch.name,
+                    category=batch.category or "Engineering",
+                    branch=batch.branch or "General",
+                    semester=batch.semester or "Semester",
+                    academic_year=batch.academic_year or "2025-2026",
+                    quality_pref=batch.video_quality_preference or "1080p",
+                    watermark_enabled=True,
+                    retry_failed_only=True,
+                    execution_mode="REPROCESS INCOMPLETE"
+                )
+
+                _last_batch_sessions_by_batch[batch.id] = reprocess_state
+                _last_batch_sessions_by_user[user_id] = reprocess_state
+
+                status_msg = await message.reply_text(
+                    f"🚀 <b>REPROCESSING INCOMPLETE LECTURES...</b>\n\n"
+                    f"📚 <b>Batch:</b> {batch.name}\n"
+                    f"🔄 <b>Incomplete / Failed:</b> {len(failed_lecs)} / {len(lectures)}\n"
+                    f"⚙️ <i>Starting high-speed multi-storage ingestion pipeline...</i>"
+                )
+                asyncio.create_task(launch_batch_execution(client, status_msg, reprocess_state))
+
+        except Exception as exc:
+            logger.exception("Error in /reprocess_batch command: %s", exc)
+            await message.reply_text("❌ Failed to reprocess batch.")
 
     # ==========================================
     # 7. COMMANDS: /STUDENTS, /STUDENT, /GRANT, /REVOKE

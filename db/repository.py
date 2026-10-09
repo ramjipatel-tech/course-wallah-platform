@@ -291,11 +291,36 @@ class ContentRepository:
     # LECTURES & MEDIA
     # ==========================================
 
+    async def get_all_batches(self) -> List[Batch]:
+        stmt = (
+            select(Batch)
+            .options(
+                selectinload(Batch.app),
+                selectinload(Batch.subjects).selectinload(Subject.folders)
+            )
+            .order_by(Batch.created_at.desc())
+        )
+        res = await self.session.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_batch_by_id_or_slug(self, identifier: str) -> Optional[Batch]:
+        slug = slugify(identifier)
+        stmt = (
+            select(Batch)
+            .options(
+                selectinload(Batch.app),
+                selectinload(Batch.subjects).selectinload(Subject.folders)
+            )
+            .where(or_(Batch.id == identifier, Batch.slug == identifier, Batch.slug == slug, Batch.name == identifier))
+        )
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def get_lecture_by_index(self, batch_id: str, lecture_index: int) -> Optional[Lecture]:
         stmt = (
             select(Lecture)
             .options(
-                selectinload(Lecture.video),
+                selectinload(Lecture.video).selectinload(Video.storages),
                 selectinload(Lecture.pdf),
                 selectinload(Lecture.folder)
             )
@@ -350,7 +375,7 @@ class ContentRepository:
         stmt = (
             select(Lecture)
             .options(
-                selectinload(Lecture.video),
+                selectinload(Lecture.video).selectinload(Video.storages),
                 selectinload(Lecture.pdf),
                 selectinload(Lecture.folder)
             )
@@ -363,7 +388,7 @@ class ContentRepository:
         stmt = (
             select(Lecture)
             .options(
-                selectinload(Lecture.video),
+                selectinload(Lecture.video).selectinload(Video.storages),
                 selectinload(Lecture.pdf),
                 selectinload(Lecture.folder)
             )
@@ -376,11 +401,45 @@ class ContentRepository:
     async def get_failed_lectures_by_batch(self, batch_id: str) -> List[Lecture]:
         stmt = (
             select(Lecture)
+            .options(
+                selectinload(Lecture.video).selectinload(Video.storages),
+                selectinload(Lecture.pdf),
+                selectinload(Lecture.folder)
+            )
             .where(and_(Lecture.batch_id == batch_id, Lecture.publication_status != PublicationStatus.PUBLISHED))
             .order_by(Lecture.lecture_index)
         )
         res = await self.session.execute(stmt)
         return list(res.scalars().all())
+
+    async def publish_all_batch_lectures(self, batch_id: str, force_all: bool = False) -> Dict[str, int]:
+        """
+        Publishes all lectures in a batch that have media attached (or all if force_all=True).
+        Ensures all published lectures are added to the playlist.
+        """
+        stmt = (
+            select(Lecture)
+            .options(
+                selectinload(Lecture.video).selectinload(Video.storages),
+                selectinload(Lecture.pdf)
+            )
+            .where(Lecture.batch_id == batch_id)
+        )
+        res = await self.session.execute(stmt)
+        lectures = res.scalars().all()
+
+        published_count = 0
+        skipped_count = 0
+        for lec in lectures:
+            has_media = force_all or lec.has_video or lec.has_pdf or lec.video is not None or lec.pdf is not None
+            if has_media:
+                lec.publication_status = PublicationStatus.PUBLISHED
+                await self.add_lecture_to_playlist(lec.subject_id, lec.id)
+                published_count += 1
+            else:
+                skipped_count += 1
+        await self.session.flush()
+        return {"published": published_count, "skipped": skipped_count, "total": len(lectures)}
 
     async def get_subject_playlist(self, subject_id: str) -> List[Dict[str, Any]]:
         stmt = (
