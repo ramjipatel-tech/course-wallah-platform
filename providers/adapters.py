@@ -327,12 +327,22 @@ class NativeMediaHelper:
         dest_dir.mkdir(parents=True, exist_ok=True)
         out_file = dest_dir / f"{clean_title}.mp4"
 
-        # Determine smart referer from URL domain
+        # Determine smart referer from URL domain & path
         parsed_stream = urlparse(url)
         origin_domain = f"{parsed_stream.scheme}://{parsed_stream.netloc}" if parsed_stream.netloc else "https://classx.co.in"
         req_headers = cls.DEFAULT_HEADERS.copy()
-        req_headers["Referer"] = f"{origin_domain}/"
-        req_headers["Origin"] = origin_domain
+
+        # If it's a ClassX / Appx video CDN URL, resolve the tenant subdomain
+        m_tenant = re.search(r"/videos/([a-zA-Z0-9_\-]+?)(?:-data)?/", parsed_stream.path)
+        if m_tenant:
+            tenant_slug = m_tenant.group(1).rstrip("-data")
+            referer_domain = f"https://{tenant_slug}.classx.co.in"
+            req_headers["Referer"] = f"{referer_domain}/"
+            req_headers["Origin"] = referer_domain
+        else:
+            req_headers["Referer"] = f"{origin_domain}/"
+            req_headers["Origin"] = origin_domain
+
         if headers:
             req_headers.update(headers)
 
