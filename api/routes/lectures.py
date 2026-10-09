@@ -112,7 +112,7 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         provider_order = {"vcdn": 1, "vevocloud": 2, "anonmp4": 3, "media_cm": 4}
         sorted_storages = sorted(video.storages, key=lambda s: provider_order.get(s.provider, 99))
         for st in sorted_storages:
-            if st.status in ("READY", VideoStorageStatus.READY.value):
+            if st.status in ("READY", "PROCESSING", VideoStorageStatus.READY.value, VideoStorageStatus.PROCESSING.value):
                 if st.provider == "media_cm":
                     filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
                     embed_url = f"https://media.cm/{filecode}"
@@ -124,9 +124,10 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
                         hls_url = st.hls_url.strip()
                     if st.playback_url:
                         playback_url = st.playback_url.strip()
-                storage_provider = st.provider
-                has_storage_video = True
-                break
+                if embed_url or hls_url or playback_url:
+                    storage_provider = st.provider
+                    has_storage_video = True
+                    break
 
     is_yt_valid = bool(video and video.youtube_video_id and not video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")))
     has_video = is_yt_valid or has_storage_video or bool(lecture.source_url)

@@ -402,15 +402,16 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
         if final_status.status == StorageProviderStatus.READY.value:
             return final_status
         elif final_status.status in (StorageProviderStatus.PROCESSING.value, StorageProviderStatus.UPLOADING.value):
-            logger.info(f"[STORAGE] [VCDN] Video {provider_video_id} is still transcoding remotely (status={final_status.status}). Returning PROCESSING.")
+            logger.info(f"[STORAGE] [VCDN] Video {provider_video_id} is transcoding asynchronously on remote server (status={final_status.status}). Serving embed URL.")
             return StorageProviderResult(
-                success=False,
+                success=True,
                 status=StorageProviderStatus.PROCESSING.value,
                 provider=self.name,
                 provider_video_id=provider_video_id,
                 embed_url=final_status.embed_url or f"https://embed.vcdn.me/embed/{provider_video_id}",
                 watch_url=final_status.watch_url or f"https://embed.vcdn.me/embed/{provider_video_id}",
-                error=f"VCDN video {provider_video_id} is transcoding asynchronously on remote server (status: {final_status.status})",
+                hls_url=final_status.hls_url,
+                playback_url=final_status.playback_url or final_status.embed_url or f"https://embed.vcdn.me/embed/{provider_video_id}",
                 raw_metadata=final_status.raw_metadata,
             )
 
