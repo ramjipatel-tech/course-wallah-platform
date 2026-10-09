@@ -1041,27 +1041,6 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span style="font-size:13px; color:#94A3B8; margin-top:6px;">This lecture does not have an active video stream or is being processed.</span>
             </div>
           `)))}
-
-          <!-- Seamless Top Overlay Bar (For YouTube embed to mask branding) -->
-          ${hasYouTube && !isDirectHls && !isEmbed && !isMediaCm ? `
-            <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
-              <div class="player-top-brand">
-                <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">
-                <span class="player-top-pill">COURSE WALLAH</span>
-                <span class="player-top-sep">|</span>
-                <span class="player-top-title">${escapeHtml(lecture.title)}</span>
-              </div>
-              <div class="player-top-badge">
-                <span class="player-live-dot"></span>
-                <span class="player-hd-text">ULTRA HD 1080p</span>
-              </div>
-            </div>
-
-            <div class="player-mask-yt-cover" onclick="togglePlayerPlayback()" title="Course Wallah Secure Player">
-              <img src="/static/logo.png" alt="Course Wallah" class="yt-cover-logo">
-              <span class="yt-cover-text">COURSE WALLAH</span>
-            </div>
-          ` : ''}
         </div>
       </div>
 
