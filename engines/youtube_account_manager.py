@@ -351,7 +351,8 @@ class YouTubeAccountManager:
         lecture_index: int = 1,
         duration: float = 0.0,
         resolution: str = "1080p",
-        progress_callback: Optional[Callable[[float, int, int], None]] = None
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        cleanup_local_file: bool = False
     ) -> Dict[str, Any]:
         """
         Executes YouTube upload with automatic account rotation and failover.
@@ -369,7 +370,6 @@ class YouTubeAccountManager:
            - Raises YouTubeUploadLimitExceededError so batch pauses gracefully.
         6. On success:
            - Immediately records DB relations.
-           - Cleans up server disk video file.
            - Clears checkpoint.
         """
         # DUPLICATE PROTECTION: Check if lecture is already uploaded in DB
@@ -489,13 +489,13 @@ class YouTubeAccountManager:
                 if batch_id:
                     cls.clear_checkpoint(str(batch_id), lecture_index)
 
-                # DISK CLEANUP: Clean up local video file from server disk immediately after successful upload
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        logger.info(f"[DISK_CLEANUP] Deleted local prepared video file from server: {file_path}")
-                except Exception as rm_e:
-                    logger.debug(f"[DISK_CLEANUP_NOTICE] Could not delete local video file: {rm_e}")
+                if cleanup_local_file:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            logger.info(f"[DISK_CLEANUP] Deleted local prepared video file from server: {file_path}")
+                    except Exception as rm_e:
+                        logger.debug(f"[DISK_CLEANUP_NOTICE] Could not delete local video file: {rm_e}")
 
                 logger.info(f"[YOUTUBE_UPLOAD_SUCCESS] Upload succeeded on account '{account_name}' -> Video ID: {yt_video_id}")
                 return upload_result

@@ -161,7 +161,8 @@ class TestYouTubeMultiAccountFailover(unittest.IsolatedAsyncioTestCase):
                 title="Test Lecture",
                 thumbnail_path=str(self.dummy_thumb),
                 batch_id="test_batch_123",
-                lecture_index=1
+                lecture_index=1,
+                cleanup_local_file=True
             )
 
             self.assertEqual(res["youtube_video_id"], "yt_success_123")
