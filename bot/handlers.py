@@ -14,10 +14,16 @@ from pyrogram.types import (
     InlineKeyboardButton
 )
 
-from config.settings import OWNER_ID, ADMINS, WATERMARK_TEXT, MAX_CONCURRENT_JOBS, BOT_USERNAME
+from pathlib import Path
+from datetime import datetime
+
+from config.settings import (
+    OWNER_ID, ADMINS, WATERMARK_TEXT, MAX_CONCURRENT_JOBS, BOT_USERNAME,
+    TELEGRAM_STORAGE_CHANNEL_ID, get_public_base_url
+)
 from db.connection import get_db_session
 from db.repository import ContentRepository, slugify
-from db.models import JobStatus, PublicationStatus
+from db.models import JobStatus, PublicationStatus, VideoStorageStatus, VideoStorage
 from parsers.indexer import TxtIndexer, NormalizedBatchTree
 from engines.job_engine import ContentProcessingEngine, BatchJobController
 from engines.youtube_account_manager import YouTubeAccountManager
@@ -26,6 +32,7 @@ from bot.batch_wizard import BatchWizardManager, BatchWizardState
 from validators.image_validator import validate_image_url
 from storage.health import StorageHealthService
 from storage.manager import MultiStorageManager
+from storage.telegram_stream.client_pool import TelegramClientPool
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +47,151 @@ _last_batch_sessions_by_user: Dict[int, BatchWizardState] = {}
 # State tracking for users in interactive YouTube credential adding flow
 _yt_add_waiting_users: Dict[int, bool] = {}
 _yt_oauth_pending_sessions: Dict[int, Dict[str, Any]] = {}
+
+# State tracking for users in interactive storage channel configuration
+_waiting_for_channel_id: Dict[int, bool] = {}
+
+
+async def publish_video_to_telegram_stream_and_db(
+    client: Client,
+    message: Message,
+    user_id: int,
+    custom_title: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Copies/Uploads a video to TELEGRAM_STORAGE_CHANNEL_ID,
+    registers it in DB as an active Lecture and VideoStorage,
+    and returns direct stream URL and website player URL.
+    """
+    pool = TelegramClientPool.get_instance()
+    storage_chat_id = pool.storage_chat_id or OWNER_ID
+
+    # 1. Determine media metadata
+    video_obj = message.video or message.document
+    duration = getattr(video_obj, "duration", 0) or 0
+    file_size = getattr(video_obj, "file_size", 0) or 0
+    width = getattr(video_obj, "width", 1920) or 1920
+    height = getattr(video_obj, "height", 1080) or 1080
+    resolution = f"{height}p" if height else "1080p"
+
+    file_name = getattr(video_obj, "file_name", "") or ""
+    caption = message.caption or ""
+    title = custom_title or caption or (Path(file_name).stem if file_name else f"Lecture Video {int(time.time())}")
+
+    # 2. Copy/Send to Telegram Storage Channel
+    storage_msg = None
+    try:
+        storage_msg = await message.copy(chat_id=storage_chat_id)
+    except Exception as copy_err:
+        logger.warning("Could not copy message directly (%s), attempting forwarding/sending...", copy_err)
+        try:
+            storage_msg = await client.forward_messages(
+                chat_id=storage_chat_id,
+                from_chat_id=message.chat.id,
+                message_ids=message.id
+            )
+        except Exception as fwd_err:
+            return False, f"Failed to upload video to storage channel ({storage_chat_id}): {fwd_err}", {}
+
+    if not storage_msg:
+        return False, "Failed to upload video to storage channel.", {}
+
+    storage_msg_id = storage_msg.id
+
+    # 3. Create or attach in DB
+    base_url = get_public_base_url()
+    stream_url = f"{base_url}/api/v1/stream/tg/{storage_msg_id}"
+
+    async with get_db_session() as session:
+        repo = ContentRepository(session)
+
+        # Get or create default app
+        app = await repo.get_or_create_app("Course Wallah", "Official Course Wallah Hub", "/static/logo.png")
+
+        # Get or create default batch
+        batch, _ = await repo.get_or_create_batch(
+            app_id=app.id,
+            name="Direct Video Streams",
+            category="Video Lectures",
+            branch="All Branches",
+            semester="All Semesters",
+            quality_pref=resolution
+        )
+
+        # Get or create subject and folder
+        subj = await repo.get_or_create_subject(batch.id, "Direct Uploads")
+        folder = await repo.get_or_create_folder(subj.id, "Telegram Cloud Stream")
+
+        # Next lecture index
+        max_idx = await repo.get_max_lecture_index_for_batch(batch.id)
+        next_idx = max_idx + 1
+
+        lecture = await repo.create_or_update_lecture(
+            folder_id=folder.id,
+            subject_id=subj.id,
+            batch_id=batch.id,
+            lecture_index=next_idx,
+            title=title,
+            source_url=stream_url,
+            provider="telegram_stream",
+            has_video=True,
+            has_pdf=False,
+            publication_status=PublicationStatus.PUBLISHED,
+            thumbnail_url="/static/logo.png"
+        )
+
+        video = await repo.attach_video_to_lecture(
+            lecture_id=lecture.id,
+            youtube_video_id=f"tg_{storage_msg_id}",
+            duration=float(duration),
+            resolution=resolution,
+            file_size=file_size,
+            title=title,
+            upload_completed_at=datetime.utcnow()
+        )
+
+        # Attach VideoStorage
+        st_record = await repo.get_video_storage_by_provider(video.id, "telegram_stream")
+        if not st_record:
+            st_record = VideoStorage(
+                video_id=video.id,
+                provider="telegram_stream",
+                provider_video_id=str(storage_msg_id),
+                playback_url=f"/api/v1/stream/tg/{storage_msg_id}",
+                status=VideoStorageStatus.READY.value,
+                remote_size=file_size,
+                remote_duration=float(duration),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            session.add(st_record)
+        else:
+            st_record.provider_video_id = str(storage_msg_id)
+            st_record.playback_url = f"/api/v1/stream/tg/{storage_msg_id}"
+            st_record.status = VideoStorageStatus.READY.value
+            st_record.remote_size = file_size
+            st_record.remote_duration = float(duration)
+            st_record.updated_at = datetime.utcnow()
+
+        await repo.add_lecture_to_playlist(subj.id, lecture.id)
+        await session.commit()
+
+        web_player_url = f"{base_url}/?app={app.slug}&batchId={batch.slug}&subjectId={subj.slug}&content={lecture.id}&isPlaying=true"
+
+    return True, "Video uploaded & published successfully!", {
+        "title": title,
+        "duration": duration,
+        "file_size": file_size,
+        "resolution": resolution,
+        "storage_chat_id": storage_chat_id,
+        "storage_msg_id": storage_msg_id,
+        "stream_url": stream_url,
+        "web_player_url": web_player_url,
+        "batch_name": "Direct Video Streams",
+        "lecture_id": lecture.id,
+        "lecture_index": next_idx
+    }
+
 
 def parse_youtube_credentials_text(text: str) -> Optional[Dict[str, Any]]:
     """
@@ -603,7 +755,7 @@ def register_handlers(app: Client):
     # ==========================================
     # 7. TELEGRAM STREAM STORAGE CHANNEL COMMANDS
     # ==========================================
-    @app.on_message(filters.command(["setchannel", "storagechannel", "setstoragechannel"]) & filters.private)
+    @app.on_message(filters.command(["setchannel", "channel", "set_channel", "storagechannel", "setstoragechannel"]) & filters.private)
     async def cmd_set_storage_channel(client: Client, message: Message):
         try:
             user_id = message.from_user.id if message.from_user else 0
@@ -611,22 +763,22 @@ def register_handlers(app: Client):
                 await message.reply_text("⛔ <b>ADMIN ONLY</b>")
                 return
 
-            from storage.telegram_stream.client_pool import TelegramClientPool
             pool = TelegramClientPool.get_instance()
 
             if len(message.command) < 2:
+                _waiting_for_channel_id[user_id] = True
                 current_chan = pool.storage_chat_id or OWNER_ID
                 text = (
                     f"📁 <b>TELEGRAM STORAGE CHANNEL CONFIGURATION</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"<b>Current Active Storage Channel:</b> <code>{current_chan}</code>\n\n"
-                    f"<b>How to set a new Channel for lecture hosting:</b>\n"
+                    f"<b>How to connect your Storage Channel:</b>\n"
                     f"1. Create a private Telegram Channel.\n"
-                    f"2. Add this bot as an <b>Administrator</b> with full Post Permissions.\n"
-                    f"3. Send <code>/id</code> in the channel to get its Channel ID (e.g. <code>-1002345678901</code>).\n"
-                    f"4. Set it by running:\n"
-                    f"   <code>/setchannel -1002345678901</code>\n\n"
-                    f"<i>All future batch videos will be uploaded directly to this channel and streamed live into Course Wallah website with 0MB limits!</i>"
+                    f"2. Add this bot as an <b>Administrator</b> with full <b>Post Messages</b> permissions.\n"
+                    f"3. Either:\n"
+                    f"   • Type & send the Channel ID here (e.g. <code>-1002345678901</code>), OR\n"
+                    f"   • <b>FORWARD</b> any post from your private channel directly to this bot!\n\n"
+                    f"👉 <i>Waiting for your Channel ID or Forwarded Message...</i>"
                 )
                 await message.reply_text(text)
                 return
@@ -658,6 +810,7 @@ def register_handlers(app: Client):
 
             # Update pool storage chat ID
             pool.storage_chat_id = target_chat_id
+            _waiting_for_channel_id.pop(user_id, None)
 
             # Persist to local .env if writable
             try:
@@ -684,7 +837,7 @@ def register_handlers(app: Client):
                 f"⚡ <b>Engine:</b> Telegram MTProto High-Speed Zero-Cost Stream\n"
                 f"🌐 <b>Website Player:</b> Course Wallah In-App HTML5 Cinema Player\n"
                 f"🚀 <b>Limits:</b> 100% Unlimited (Up to 2GB per video)\n\n"
-                f"<i>All newly ingested batches will now upload to this channel and stream directly to your students!</i>"
+                f"<i>All newly ingested batches and video uploads will now save to this channel and stream directly to your website!</i>"
             )
             await wait_msg.edit_text(success_text)
 
@@ -727,6 +880,192 @@ def register_handlers(app: Client):
         except Exception as exc:
             logger.exception("Error in /streamstatus command: %s", exc)
             await message.reply_text("❌ Failed to fetch stream status.")
+
+    @app.on_message(filters.command(["stream", "uploadvideo", "upload_video", "streamvideo"]) & filters.private)
+    async def cmd_stream(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            # Case 1: Replied to a video or document
+            if message.reply_to_message and (message.reply_to_message.video or message.reply_to_message.document):
+                target_msg = message.reply_to_message
+                custom_title = " ".join(message.command[1:]).strip() if len(message.command) > 1 else None
+                status_msg = await message.reply_text("⚡ <i>Publishing replied video to Storage Channel & Website...</i>")
+                ok, text_msg, meta = await publish_video_to_telegram_stream_and_db(
+                    client=client,
+                    message=target_msg,
+                    user_id=user_id,
+                    custom_title=custom_title
+                )
+                if not ok:
+                    await status_msg.edit_text(f"❌ {text_msg}")
+                    return
+
+                stream_url = meta["stream_url"]
+                web_url = meta["web_player_url"]
+                title = meta["title"]
+                size_mb = meta["file_size"] / (1024 * 1024)
+                duration_mins = meta["duration"] // 60
+                duration_secs = meta["duration"] % 60
+                dur_str = f"{duration_mins}m {duration_secs:02d}s" if meta["duration"] else "N/A"
+
+                card = (
+                    f"🎬 <b>TELEGRAM STREAM CREATED & PUBLISHED!</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📺 <b>Title:</b> <b>{title}</b>\n"
+                    f"📊 <b>Size:</b> <code>{size_mb:.2f} MB</code> | <b>Duration:</b> <code>{dur_str}</code>\n"
+                    f"🎯 <b>Quality:</b> <code>{meta.get('resolution', '1080p')} Ultra HD</code>\n"
+                    f"📁 <b>Storage Channel:</b> <code>{meta['storage_chat_id']}</code> (Msg #<code>{meta['storage_msg_id']}</code>)\n\n"
+                    f"⚡ <b>Direct HTTP Stream Link:</b>\n"
+                    f"<code>{stream_url}</code>\n\n"
+                    f"🌐 <b>Website Player Link:</b>\n"
+                    f"<code>{web_url}</code>\n\n"
+                    f"💻 <b>HTML5 Embed Code:</b>\n"
+                    f"<code>&lt;video controls src=\"{stream_url}\"&gt;&lt;/video&gt;</code>\n\n"
+                    f"✅ <i>Lecture is now live on the Course Wallah website portal!</i>"
+                )
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Open on Website", url=web_url)],
+                    [InlineKeyboardButton("🎬 Direct Stream", url=stream_url), InlineKeyboardButton("⚡ Stream Status", callback_data="admin:streamstatus")]
+                ])
+                await status_msg.edit_text(card, reply_markup=markup, disable_web_page_preview=True)
+                return
+
+            # Case 2: URL provided (e.g. /stream https://example.com/video.mp4 Lecture 1)
+            if len(message.command) > 1:
+                url_candidate = message.command[1].strip()
+                if url_candidate.startswith("http://") or url_candidate.startswith("https://"):
+                    custom_title = " ".join(message.command[2:]).strip() if len(message.command) > 2 else "Stream Video"
+                    status_msg = await message.reply_text(f"⏳ <i>Downloading media stream from URL...</i>\n<code>{url_candidate[:60]}...</code>")
+
+                    try:
+                        from downloader.downloader import MediaDownloader
+                        downloaded_path, dl_meta = await MediaDownloader.download_video_stream_with_meta(
+                            url=url_candidate,
+                            title=custom_title,
+                            quality="1080p"
+                        )
+                        await status_msg.edit_text("⚡ <i>Uploading downloaded video to Telegram Storage Channel...</i>")
+
+                        pool = TelegramClientPool.get_instance()
+                        storage_chat = pool.storage_chat_id or OWNER_ID
+
+                        sent_msg = await client.send_video(
+                            chat_id=storage_chat,
+                            video=downloaded_path,
+                            caption=f"🎬 <b>{custom_title}</b>",
+                            supports_streaming=True
+                        )
+
+                        file_size = os.path.getsize(downloaded_path) if os.path.exists(downloaded_path) else (sent_msg.video.file_size if sent_msg.video else 0)
+
+                        try:
+                            os.remove(downloaded_path)
+                        except Exception:
+                            pass
+
+                        # Publish to DB
+                        base_url = get_public_base_url()
+                        stream_url = f"{base_url}/api/v1/stream/tg/{sent_msg.id}"
+
+                        async with get_db_session() as session:
+                            repo = ContentRepository(session)
+                            app = await repo.get_or_create_app("Course Wallah", "Official Course Wallah Hub", "/static/logo.png")
+                            batch, _ = await repo.get_or_create_batch(
+                                app_id=app.id,
+                                name="Direct Video Streams",
+                                category="Video Lectures",
+                                branch="All Branches",
+                                semester="All Semesters",
+                                quality_pref="1080p"
+                            )
+                            subj = await repo.get_or_create_subject(batch.id, "Direct Uploads")
+                            folder = await repo.get_or_create_folder(subj.id, "Telegram Cloud Stream")
+                            max_idx = await repo.get_max_lecture_index_for_batch(batch.id)
+                            next_idx = max_idx + 1
+
+                            lecture = await repo.create_or_update_lecture(
+                                folder_id=folder.id,
+                                subject_id=subj.id,
+                                batch_id=batch.id,
+                                lecture_index=next_idx,
+                                title=custom_title,
+                                source_url=stream_url,
+                                provider="telegram_stream",
+                                has_video=True,
+                                has_pdf=False,
+                                publication_status=PublicationStatus.PUBLISHED,
+                                thumbnail_url="/static/logo.png"
+                            )
+
+                            video = await repo.attach_video_to_lecture(
+                                lecture_id=lecture.id,
+                                youtube_video_id=f"tg_{sent_msg.id}",
+                                duration=float(sent_msg.video.duration if sent_msg.video else 0),
+                                resolution="1080p",
+                                file_size=file_size,
+                                title=custom_title,
+                                upload_completed_at=datetime.utcnow()
+                            )
+
+                            st_record = VideoStorage(
+                                video_id=video.id,
+                                provider="telegram_stream",
+                                provider_video_id=str(sent_msg.id),
+                                playback_url=f"/api/v1/stream/tg/{sent_msg.id}",
+                                status=VideoStorageStatus.READY.value,
+                                remote_size=file_size,
+                                remote_duration=float(sent_msg.video.duration if sent_msg.video else 0),
+                                created_at=datetime.utcnow(),
+                                updated_at=datetime.utcnow()
+                            )
+                            session.add(st_record)
+                            await repo.add_lecture_to_playlist(subj.id, lecture.id)
+                            await session.commit()
+
+                            web_player_url = f"{base_url}/?app={app.slug}&batchId={batch.slug}&subjectId={subj.slug}&content={lecture.id}&isPlaying=true"
+
+                        card = (
+                            f"🎬 <b>URL DOWNLOADED & PUBLISHED TO WEBSITE!</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"📺 <b>Title:</b> <b>{custom_title}</b>\n"
+                            f"📊 <b>Size:</b> <code>{file_size / (1024*1024):.2f} MB</code>\n"
+                            f"📁 <b>Storage Channel:</b> <code>{storage_chat}</code> (Msg #<code>{sent_msg.id}</code>)\n\n"
+                            f"⚡ <b>Direct HTTP Stream Link:</b>\n"
+                            f"<code>{stream_url}</code>\n\n"
+                            f"🌐 <b>Website Player Link:</b>\n"
+                            f"<code>{web_player_url}</code>\n\n"
+                            f"✅ <i>Lecture is now live on the Course Wallah website portal!</i>"
+                        )
+                        markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🌐 Open on Website", url=web_player_url)],
+                            [InlineKeyboardButton("🎬 Direct Stream", url=stream_url), InlineKeyboardButton("⚡ Stream Status", callback_data="admin:streamstatus")]
+                        ])
+                        await status_msg.edit_text(card, reply_markup=markup, disable_web_page_preview=True)
+                        return
+                    except Exception as url_err:
+                        logger.exception("Error downloading & streaming URL: %s", url_err)
+                        await status_msg.edit_text(f"❌ Failed to stream video from URL: {url_err}")
+                        return
+
+            # Default Help for /stream
+            help_text = (
+                f"⚡ <b>COURSE WALLAH TELEGRAM STREAM ENGINE</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>How to upload & generate website stream links:</b>\n\n"
+                f"1. <b>Direct Video Upload:</b> Just send any <code>.mp4</code> or video file directly to this bot.\n"
+                f"2. <b>Reply to Video:</b> Reply to any video message in Telegram with <code>/stream [Title]</code>\n"
+                f"3. <b>Stream from URL:</b> Send <code>/stream &lt;video_url&gt; [Title]</code>\n\n"
+                f"<i>The bot will upload it directly to your Telegram storage channel, generate an HTTP 206 streaming link, and add it to your website player!</i>"
+            )
+            await message.reply_text(help_text)
+        except Exception as exc:
+            logger.exception("Error in /stream command: %s", exc)
+            await message.reply_text("❌ Failed to process stream command.")
+
 
     @app.on_message(filters.command(["yt_primary", "yt_set_primary"]) & filters.private)
     async def cmd_yt_primary(client: Client, message: Message):
@@ -1611,7 +1950,133 @@ def register_handlers(app: Client):
 
 
     # ==========================================
-    # 7. DOCUMENT HANDLER (.TXT BATCH UPLOADER & .JSON OAUTH CREDS)
+    # 7. FORWARDED CHANNEL MESSAGE HANDLER (1-CLICK STORAGE CHANNEL SETUP)
+    # ==========================================
+    @app.on_message(filters.forwarded & filters.private)
+    async def handle_forwarded_message(client: Client, message: Message):
+        user_id = message.from_user.id if message.from_user else 0
+        if not is_admin(user_id):
+            return
+
+        fwd_chat = message.forward_from_chat
+        if fwd_chat and fwd_chat.type in ("channel", "supergroup", "group"):
+            chan_id = fwd_chat.id
+            chan_title = fwd_chat.title or "Private Storage Channel"
+
+            wait_msg = await message.reply_text(
+                f"🔍 <b>Detected Channel Forward:</b> <b>{chan_title}</b> (<code>{chan_id}</code>)\n"
+                f"⏳ <i>Testing bot administrator permissions...</i>"
+            )
+            try:
+                test_post = await client.send_message(
+                    chat_id=chan_id,
+                    text="⚡ <b>Course Wallah Streaming Engine Verification</b>\n\nStorage Channel connected successfully."
+                )
+                await asyncio.sleep(1)
+                await test_post.delete()
+
+                pool = TelegramClientPool.get_instance()
+                pool.storage_chat_id = chan_id
+                _waiting_for_channel_id.pop(user_id, None)
+
+                # Persist to .env
+                try:
+                    from config.settings import BASE_DIR
+                    env_file = BASE_DIR / ".env"
+                    if env_file.exists():
+                        env_text = env_file.read_text(encoding="utf-8")
+                        if "TELEGRAM_STORAGE_CHANNEL_ID=" in env_text:
+                            env_text = re.sub(
+                                r"TELEGRAM_STORAGE_CHANNEL_ID=.*",
+                                f"TELEGRAM_STORAGE_CHANNEL_ID={chan_id}",
+                                env_text
+                            )
+                        else:
+                            env_text += f"\nTELEGRAM_STORAGE_CHANNEL_ID={chan_id}\n"
+                        env_file.write_text(env_text, encoding="utf-8")
+                except Exception as env_err:
+                    logger.debug(f"[ENV_UPDATE_NOTICE] {env_err}")
+
+                card = (
+                    f"🎉 <b>STORAGE CHANNEL CONNECTED SUCCESSFULLY!</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📺 <b>Channel Name:</b> <b>{chan_title}</b>\n"
+                    f"🆔 <b>Channel ID:</b> <code>{chan_id}</code>\n"
+                    f"⚡ <b>Engine:</b> Telegram MTProto High-Speed Zero-Cost Stream\n"
+                    f"🌐 <b>Website Player:</b> Course Wallah In-App HTML5 Cinema Player\n"
+                    f"🚀 <b>Capacity:</b> 100% Unlimited (Up to 2GB per video)\n\n"
+                    f"<i>Channel connected! Any video you send or batch you ingest will now upload here and stream to your website instantly.</i>"
+                )
+                await wait_msg.edit_text(card)
+            except Exception as perm_err:
+                await wait_msg.edit_text(
+                    f"❌ <b>Bot Access Test Failed for '{chan_title}' (<code>{chan_id}</code>)!</b>\n\n"
+                    f"Error: <code>{str(perm_err)}</code>\n\n"
+                    f"👉 Please make sure this bot is added as an <b>Administrator</b> to the channel with <b>Post Messages</b> permission."
+                )
+
+    # ==========================================
+    # 7.5. DIRECT VIDEO MESSAGE HANDLER
+    # ==========================================
+    @app.on_message(filters.video & filters.private)
+    async def handle_video_message(client: Client, message: Message):
+        user_id = message.from_user.id if message.from_user else 0
+        if not is_admin(user_id):
+            await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+            return
+
+        status_msg = await message.reply_text("⚡ <i>Uploading video to Telegram Storage Channel & generating live web stream...</i>")
+        try:
+            ok, text_msg, meta = await publish_video_to_telegram_stream_and_db(
+                client=client,
+                message=message,
+                user_id=user_id
+            )
+            if not ok:
+                await status_msg.edit_text(f"❌ {text_msg}")
+                return
+
+            title = meta["title"]
+            size_mb = meta["file_size"] / (1024 * 1024)
+            duration_mins = meta["duration"] // 60
+            duration_secs = meta["duration"] % 60
+            dur_str = f"{duration_mins}m {duration_secs:02d}s" if meta["duration"] else "N/A"
+
+            stream_url = meta["stream_url"]
+            web_url = meta["web_player_url"]
+            storage_chat = meta["storage_chat_id"]
+            storage_msg_id = meta["storage_msg_id"]
+            res = meta["resolution"]
+
+            card = (
+                f"🎬 <b>VIDEO UPLOADED & LIVE ON WEBSITE!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📺 <b>Title:</b> <b>{title}</b>\n"
+                f"📊 <b>Size:</b> <code>{size_mb:.2f} MB</code> | <b>Duration:</b> <code>{dur_str}</code>\n"
+                f"🎯 <b>Quality:</b> <code>{res} Ultra HD</code>\n"
+                f"📁 <b>Storage Channel:</b> <code>{storage_chat}</code> (Msg #<code>{storage_msg_id}</code>)\n\n"
+                f"⚡ <b>Direct HTTP Stream Link:</b>\n"
+                f"<code>{stream_url}</code>\n\n"
+                f"🌐 <b>Website Player Link:</b>\n"
+                f"<code>{web_url}</code>\n\n"
+                f"💻 <b>HTML5 Embed Code:</b>\n"
+                f"<code>&lt;video controls src=\"{stream_url}\"&gt;&lt;/video&gt;</code>\n\n"
+                f"✅ <i>Published to Course Wallah web portal automatically!</i>"
+            )
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 Open on Website", url=web_url)],
+                [
+                    InlineKeyboardButton("🎬 Direct Stream", url=stream_url),
+                    InlineKeyboardButton("⚡ Stream Status", callback_data="admin:streamstatus")
+                ]
+            ])
+            await status_msg.edit_text(card, reply_markup=markup, disable_web_page_preview=True)
+        except Exception as exc:
+            logger.exception("Error in handle_video_message: %s", exc)
+            await status_msg.edit_text(f"❌ Failed to process video upload: {exc}")
+
+    # ==========================================
+    # 7.6. DOCUMENT HANDLER (.TXT BATCH UPLOADER, .JSON CREDS, & VIDEO FILES)
     # ==========================================
     @app.on_message(filters.document & filters.private)
     async def handle_document(client: Client, message: Message):
@@ -1622,6 +2087,13 @@ def register_handlers(app: Client):
 
         doc = message.document
         fname = (doc.file_name or "").lower()
+        mime = (doc.mime_type or "").lower()
+
+        # Route document videos (e.g. .mp4, .mkv, .mov, etc.) to video stream publisher
+        video_exts = (".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".m4v", ".flv", ".3gp")
+        if fname.endswith(video_exts) or mime.startswith("video/"):
+            await handle_video_message(client, message)
+            return
 
         # Handle JSON OAuth Credentials File Upload
         if fname.endswith(".json"):
@@ -1693,7 +2165,7 @@ def register_handlers(app: Client):
             return
 
         if not fname.endswith(".txt"):
-            await message.reply_text("❌ <b>Invalid file format.</b> Please upload a <code>.txt</code> course file or <code>.json</code> credentials file.")
+            await message.reply_text("❌ <b>Invalid file format.</b> Please upload a <code>.txt</code> course file, <code>.mp4</code> video, or <code>.json</code> credentials file.")
             return
 
         status_msg = await message.reply_text("⏳ <i>Downloading and analyzing TXT batch file...</i>")
@@ -1745,7 +2217,8 @@ def register_handlers(app: Client):
         "start", "help", "id", "info", "stop", "remove_auth",
         "youtube", "youtube_accounts", "youtube_status", "youtube_pause", "youtube_resume",
         "yt", "yt_list", "yt_add", "add_youtube", "yt_del", "yt_remove", "yt_test", "yt_primary", "yt_set_primary", "yt_toggle", "yt_status", "yt_pause", "yt_resume",
-        "admin", "batch", "uploadbatch", "batchstatus", "batchjobs", "batchretry", "batchresume", "batchpause", "batchcancel", "batchlogs", "health", "diagnostics", "students", "student", "grant", "revoke"
+        "admin", "batch", "uploadbatch", "batchstatus", "batchjobs", "batchretry", "batchresume", "batchpause", "batchcancel", "batchlogs", "health", "diagnostics", "students", "student", "grant", "revoke",
+        "setchannel", "channel", "set_channel", "storagechannel", "setstoragechannel", "streamstatus", "tgstream", "stream_status", "stream", "uploadvideo", "upload_video", "streamvideo"
     ]))
     async def handle_text_inputs(client: Client, message: Message):
 
@@ -1754,6 +2227,60 @@ def register_handlers(app: Client):
             return
 
         text = message.text.strip()
+
+        # 0. Check if user is waiting to set storage channel ID
+        if _waiting_for_channel_id.get(user_id):
+            try:
+                target_chat_id = int(text)
+                wait_msg = await message.reply_text(f"⏳ <i>Verifying bot access to channel <code>{target_chat_id}</code>...</i>")
+                test_post = await client.send_message(
+                    chat_id=target_chat_id,
+                    text="⚡ <b>Course Wallah Streaming Engine Verification</b>\n\nStorage Channel connected successfully."
+                )
+                await asyncio.sleep(1)
+                await test_post.delete()
+
+                pool = TelegramClientPool.get_instance()
+                pool.storage_chat_id = target_chat_id
+                _waiting_for_channel_id.pop(user_id, None)
+
+                try:
+                    from config.settings import BASE_DIR
+                    env_file = BASE_DIR / ".env"
+                    if env_file.exists():
+                        env_text = env_file.read_text(encoding="utf-8")
+                        if "TELEGRAM_STORAGE_CHANNEL_ID=" in env_text:
+                            env_text = re.sub(
+                                r"TELEGRAM_STORAGE_CHANNEL_ID=.*",
+                                f"TELEGRAM_STORAGE_CHANNEL_ID={target_chat_id}",
+                                env_text
+                            )
+                        else:
+                            env_text += f"\nTELEGRAM_STORAGE_CHANNEL_ID={target_chat_id}\n"
+                        env_file.write_text(env_text, encoding="utf-8")
+                except Exception as env_err:
+                    logger.debug(f"[ENV_UPDATE_NOTICE] {env_err}")
+
+                success_text = (
+                    f"🎉 <b>STORAGE CHANNEL CONNECTED SUCCESSFULLY!</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"✅ <b>Active Channel ID:</b> <code>{target_chat_id}</code>\n"
+                    f"⚡ <b>Engine:</b> Telegram MTProto High-Speed Zero-Cost Stream\n"
+                    f"🌐 <b>Website Player:</b> Course Wallah In-App HTML5 Cinema Player\n"
+                    f"🚀 <b>Capacity:</b> 100% Unlimited (Up to 2GB per video)\n\n"
+                    f"<i>Channel connected! Any video you send or batch you ingest will now upload here and stream to your website instantly.</i>"
+                )
+                await wait_msg.edit_text(success_text)
+                return
+            except ValueError:
+                pass
+            except Exception as perm_err:
+                await message.reply_text(
+                    f"❌ <b>Channel Access Failed!</b>\n\n"
+                    f"Error: <code>{str(perm_err)}</code>\n\n"
+                    f"👉 Please make sure this bot is added as an <b>Administrator</b> to channel <code>{text}</code> with <b>Post Messages</b> permission."
+                )
+                return
 
         # 1. Check if user is in an active 1-Click Google OAuth flow waiting for auth code or redirect URL
         if user_id in _yt_oauth_pending_sessions:
@@ -1772,6 +2299,7 @@ def register_handlers(app: Client):
                         sess["client_id"],
                         sess.get("redirect_uri", "http://localhost")
                     )
+
                     markup = InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔄 Re-Authorize (Get New Code)", url=auth_url)],
                         [InlineKeyboardButton("❌ Cancel", callback_data="yt:cancel_oauth")]

@@ -137,3 +137,21 @@ STORAGE_CHUNK_SIZE_BYTES = int(os.environ.get("STORAGE_CHUNK_SIZE_BYTES", str(8 
 STORAGE_REQUIRED_PROVIDERS = [
     x.strip().lower() for x in os.environ.get("STORAGE_REQUIRED_PROVIDERS", "media_cm").split(",") if x.strip()
 ]
+
+
+def get_public_base_url() -> str:
+    """
+    Returns the canonical public base URL of the Course Wallah Platform
+    (Railway production domain, custom domain, or local dev URL).
+    """
+    url = (
+        os.environ.get("PUBLIC_URL")
+        or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+        or os.environ.get("SITE_URL")
+        or os.environ.get("API_URL")
+        or "http://localhost:8000"
+    ).strip().rstrip("/")
+    if url and not url.startswith("http://") and not url.startswith("https://"):
+        url = f"https://{url}"
+    return url
+
