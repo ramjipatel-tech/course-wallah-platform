@@ -204,7 +204,8 @@ class MediaCmStorageProvider(BaseVideoStorageProvider):
             provider=self.name,
             provider_video_id=filecode,
             watch_url=f"https://media.cm/{filecode}",
-            embed_url=f"https://media.cm/embed/{filecode}",
+            embed_url=f"https://media.cm/{filecode}",
+            playback_url=f"https://media.cm/{filecode}",
             remote_size=file_size,
             raw_metadata=upload_data,
         )
@@ -233,7 +234,7 @@ class MediaCmStorageProvider(BaseVideoStorageProvider):
                     remote_status = item_info.get("status")
                     if remote_status == 200 or data.get("status") == 200:
                         watch_url = f"https://media.cm/{provider_video_id}"
-                        embed_url = f"https://media.cm/embed/{provider_video_id}"
+                        embed_url = f"https://media.cm/{provider_video_id}"
                         return StorageProviderResult(
                             success=True,
                             status=StorageProviderStatus.READY.value,
@@ -241,7 +242,7 @@ class MediaCmStorageProvider(BaseVideoStorageProvider):
                             provider_video_id=provider_video_id,
                             watch_url=watch_url,
                             embed_url=embed_url,
-                            playback_url=embed_url,
+                            playback_url=watch_url,
                             remote_size=int(item_info.get("size", 0) or 0),
                             raw_metadata=data,
                         )

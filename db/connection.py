@@ -125,6 +125,19 @@ def _run_migrations(sync_conn):
                 except Exception as ex:
                     logger.debug(f"[MIGRATION] Column {col_name} on youtube_uploads skipped: {ex}")
 
+    # Migration for video_storages: Normalize Media.cm playback URLs (remove invalid /embed/ prefix)
+    if "video_storages" in tables:
+        try:
+            sync_conn.execute(text(
+                "UPDATE video_storages SET "
+                "embed_url = 'https://media.cm/' || provider_video_id, "
+                "playback_url = 'https://media.cm/' || provider_video_id, "
+                "watch_url = 'https://media.cm/' || provider_video_id "
+                "WHERE provider = 'media_cm' AND embed_url LIKE '%/embed/%'"
+            ))
+        except Exception as ex:
+            logger.debug(f"[MIGRATION] Normalizing media_cm embed URLs notice: {ex}")
+
 
 async def init_db():
     """Initializes all database tables safely and runs pending migrations."""

@@ -111,12 +111,17 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     if video and video.storages:
         for st in video.storages:
             if st.status in ("READY", VideoStorageStatus.READY.value):
-                if st.embed_url:
-                    embed_url = st.embed_url.strip()
-                if st.hls_url:
-                    hls_url = st.hls_url.strip()
-                if st.playback_url:
-                    playback_url = st.playback_url.strip()
+                if st.provider == "media_cm":
+                    filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
+                    embed_url = f"https://media.cm/{filecode}"
+                    playback_url = f"https://media.cm/{filecode}"
+                else:
+                    if st.embed_url:
+                        embed_url = st.embed_url.strip()
+                    if st.hls_url:
+                        hls_url = st.hls_url.strip()
+                    if st.playback_url:
+                        playback_url = st.playback_url.strip()
                 storage_provider = st.provider
                 has_storage_video = True
                 break
