@@ -98,33 +98,31 @@ class TelegramClientPool:
         return cls._instance
 
     async def start(self):
-        if self._is_started:
+        if self._is_started and self.clients:
             return
 
         async with self._lock:
-            if self._is_started:
+            if self._is_started and self.clients:
                 return
 
             if not self.main_token or not self.api_id or not self.api_hash:
                 logger.warning("[TG_POOL] Telegram credentials not configured. Streaming pool disabled.")
                 return
 
-            session_dir = BASE_DIR / "data" / "sessions"
-            session_dir.mkdir(parents=True, exist_ok=True)
-
-            # 1. Start primary bot client
+            # 1. Start primary in-memory bot client
             main_id_prefix = self.main_token.split(":")[0] if ":" in self.main_token else "main"
             main_client = Client(
                 name=f"stream_main_{main_id_prefix}",
                 api_id=self.api_id,
                 api_hash=self.api_hash,
                 bot_token=self.main_token,
-                workdir=str(session_dir),
+                in_memory=True,
                 no_updates=True,
             )
             try:
                 await main_client.start()
-                self.clients.append(main_client)
+                if main_client not in self.clients:
+                    self.clients.append(main_client)
                 logger.info(f"[TG_POOL] Primary streaming client started (Bot ID: {main_id_prefix})")
             except Exception as e:
                 logger.error(f"[TG_POOL] Failed to start primary streaming client: {e}")
@@ -137,12 +135,13 @@ class TelegramClientPool:
                     api_id=self.api_id,
                     api_hash=self.api_hash,
                     bot_token=tok,
-                    workdir=str(session_dir),
+                    in_memory=True,
                     no_updates=True,
                 )
                 try:
                     await w_client.start()
-                    self.clients.append(w_client)
+                    if w_client not in self.clients:
+                        self.clients.append(w_client)
                     logger.info(f"[TG_POOL] Worker streaming client #{i+1} started (Bot ID: {w_prefix})")
                 except Exception as wex:
                     logger.warning(f"[TG_POOL] Could not start worker bot token #{i+1}: {wex}")
@@ -150,11 +149,18 @@ class TelegramClientPool:
             self._is_started = len(self.clients) > 0
             logger.info(f"[TG_POOL] Total active streaming workers in pool: {len(self.clients)}")
 
+    def register_client(self, client: Client):
+        """Registers an external active Pyrogram client (e.g. from the Telegram bot)."""
+        if client and client not in self.clients:
+            self.clients.insert(0, client)
+            self._is_started = True
+            logger.info(f"[TG_POOL] Registered external bot client into streaming pool. (Total: {len(self.clients)})")
+
     async def stop(self):
         async with self._lock:
             for c in self.clients:
                 try:
-                    if c.is_connected:
+                    if getattr(c, "is_connected", False):
                         await c.stop()
                 except Exception:
                     pass
@@ -259,14 +265,26 @@ class TelegramClientPool:
         """
         cache_key = f"{chat_id}:{message_id}"
         cached_meta = GLOBAL_HEADER_CACHE.get_meta(cache_key)
-        
+
         if not self._is_started or not self.clients:
             await self.start()
 
-        client = self.get_client()
-        msg: Message = await client.get_messages(chat_id=chat_id, message_ids=message_id)
+        if not self.clients:
+            raise RuntimeError("Telegram streaming client pool is offline.")
+
+        msg = None
+        last_err = None
+        for client in self.clients:
+            try:
+                msg = await client.get_messages(chat_id=chat_id, message_ids=message_id)
+                if msg and not msg.empty and (msg.video or msg.document):
+                    break
+            except Exception as err:
+                last_err = err
+                continue
+
         if not msg or msg.empty:
-            raise ValueError(f"Message {message_id} in chat {chat_id} not found or deleted on Telegram.")
+            raise ValueError(f"Message {message_id} in chat {chat_id} not found on Telegram. ({last_err or 'Empty message'})")
 
         media = msg.video or msg.document
         if not media:
@@ -285,6 +303,7 @@ class TelegramClientPool:
         start_byte: int,
         end_byte: int,
         chunk_size: int = 1024 * 1024,
+        media: Optional[Any] = None,
     ) -> AsyncGenerator[bytes, None]:
         """
         Streams binary chunks for a specific byte range directly from Telegram MTProto.
@@ -304,8 +323,16 @@ class TelegramClientPool:
             if start_byte > end_byte:
                 return
 
-        client = self.get_client()
-        media, total_size, _ = await self.get_media_info(chat_id, message_id)
+        if not self.clients:
+            return
+
+        client = self.clients[0]
+        if not media:
+            try:
+                media, _, _ = await self.get_media_info(chat_id, message_id)
+            except Exception as get_err:
+                logger.warning(f"[STREAM_MEDIA_LOOKUP_ERR] msg_id={message_id}: {get_err}")
+                return
 
         # Pyrogram stream_media works with 1MB chunk offsets
         chunk_offset = math.floor(start_byte / (1024 * 1024))

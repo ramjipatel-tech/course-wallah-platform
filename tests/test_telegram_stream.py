@@ -74,7 +74,7 @@ async def test_fastapi_stream_endpoint_range_requests():
         mock_media.mime_type = "video/mp4"
         mock_media.file_name = "lecture_998877.mp4"
 
-        async def fake_stream_range(chat_id, msg_id, start, end, chunk_size=1024*1024):
+        async def fake_stream_range(chat_id, msg_id, start, end, chunk_size=1024*1024, media=None, **kwargs):
             # Yield simulated byte chunks
             chunk = b"A" * (end - start + 1)
             yield chunk

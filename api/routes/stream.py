@@ -79,7 +79,7 @@ async def stream_telegram_video(
     if not range:
         base_headers["Content-Length"] = str(file_size)
         return StreamingResponse(
-            pool.stream_range(chat_id, message_id, 0, file_size - 1),
+            pool.stream_range(chat_id, message_id, 0, file_size - 1, media=media),
             status_code=200,
             headers=base_headers,
             media_type=mime_type or "video/mp4",
@@ -112,7 +112,7 @@ async def stream_telegram_video(
     partial_headers["Content-Length"] = str(content_length)
 
     return StreamingResponse(
-        pool.stream_range(chat_id, message_id, start_byte, end_byte),
+        pool.stream_range(chat_id, message_id, start_byte, end_byte, media=media),
         status_code=206,
         headers=partial_headers,
         media_type=mime_type or "video/mp4",

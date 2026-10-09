@@ -47,6 +47,13 @@ async def start_bot():
     me = await bot_client.get_me()
     logger.info(f"Bot successfully started as @{me.username} (ID: {me.id})")
 
+    # Share active bot client with TelegramClientPool for zero-latency streaming
+    try:
+        from storage.telegram_stream.client_pool import TelegramClientPool
+        TelegramClientPool.get_instance().register_client(bot_client)
+    except Exception as pool_err:
+        logger.debug(f"[TG_POOL_REG_NOTICE] {pool_err}")
+
     # Register admin and general commands in Telegram default/admin command scope
     try:
         from pyrogram.types import BotCommand, BotCommandScopeDefault
