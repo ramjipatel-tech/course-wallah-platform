@@ -342,9 +342,9 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
         """
         logger.info(f"[STORAGE] [VCDN] Starting verification for videoId={provider_video_id}...")
         start_time = time.time()
-        timeout = self.verify_timeout or STORAGE_VERIFY_TIMEOUT or 60
-        poll_interval = 3
-        max_interval = 8
+        timeout = min(self.verify_timeout or STORAGE_VERIFY_TIMEOUT or 15, 15)
+        poll_interval = 2
+        max_interval = 4
 
         while (time.time() - start_time) < timeout:
             status_res = await self.get_status(provider_video_id)
@@ -352,7 +352,7 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
                 # Video is ready in VCDN! Now mint playback token to get streamUrl if available
                 stream_url = status_res.hls_url
                 try:
-                    async with httpx.AsyncClient(timeout=20.0) as client:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
                         tok_url = f"{self.base_url}/api/v1/videos/{provider_video_id}/playback-token"
                         tok_res = await client.post(
                             tok_url,
@@ -397,12 +397,12 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
             await asyncio.sleep(poll_interval)
             poll_interval = min(poll_interval + 1, max_interval)
 
-        # If verification timeout expired, check current status one last time
+        # After quick checks, if video is accepted and transcoding remotely, return success immediately
         final_status = await self.get_status(provider_video_id)
         if final_status.status == StorageProviderStatus.READY.value:
             return final_status
         elif final_status.status in (StorageProviderStatus.PROCESSING.value, StorageProviderStatus.UPLOADING.value):
-            logger.info(f"[STORAGE] [VCDN] Video {provider_video_id} is transcoding asynchronously on remote server (status={final_status.status}). Serving embed URL.")
+            logger.info(f"[STORAGE] [VCDN] Video {provider_video_id} is transcoding asynchronously on remote server (status={final_status.status}). Serving in-app embed URL.")
             return StorageProviderResult(
                 success=True,
                 status=StorageProviderStatus.PROCESSING.value,
