@@ -106,24 +106,38 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     embed_url = None
     hls_url = None
     playback_url = None
+    stream_url = None
     storage_provider = None
 
     if video and video.storages:
-        provider_order = {"telegram": 1, "vcdn": 2, "vevocloud": 3, "anonmp4": 4, "media_cm": 5}
+        provider_order = {
+            "telegram": 1,
+            "telegram_stream": 1,
+            "vcdn": 2,
+            "vevocloud": 3,
+            "anonmp4": 4,
+            "media_cm": 5
+        }
         sorted_storages = sorted(video.storages, key=lambda s: provider_order.get(s.provider, 99))
         for st in sorted_storages:
             if st.status in ("READY", "PROCESSING", VideoStorageStatus.READY.value, VideoStorageStatus.PROCESSING.value):
-                if st.provider == "telegram":
+                if st.provider in ("telegram", "telegram_stream"):
                     msg_id = st.provider_video_id
                     tg_url = f"/api/v1/stream/tg/{msg_id}"
                     stream_url = tg_url
                     playback_url = tg_url
-                    hls_url = tg_url
+                    hls_url = None
                     embed_url = None
+                    storage_provider = "telegram"
+                    has_storage_video = True
+                    break
                 elif st.provider == "media_cm":
                     filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
                     playback_url = f"https://media.cm/{filecode}"
                     embed_url = None  # Media.cm free tier blocks iframe embed for >100MB files; use Cinema launcher
+                    storage_provider = "media_cm"
+                    has_storage_video = True
+                    break
                 else:
                     if st.embed_url:
                         embed_url = st.embed_url.strip()
@@ -131,13 +145,17 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
                         hls_url = st.hls_url.strip()
                     if st.playback_url:
                         playback_url = st.playback_url.strip()
-                if embed_url or hls_url or playback_url or stream_url:
-                    storage_provider = st.provider
-                    has_storage_video = True
-                    break
+                    if embed_url or hls_url or playback_url:
+                        storage_provider = st.provider
+                        has_storage_video = True
+                        break
 
-    is_yt_valid = bool(video and video.youtube_video_id and not video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")))
-    has_video = is_yt_valid or has_storage_video or bool(lecture.source_url)
+    is_yt_valid = bool(
+        video
+        and video.youtube_video_id
+        and not video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ", "tg_"))
+    )
+    has_video = has_storage_video or is_yt_valid or bool(lecture.source_url)
 
     if not has_video:
         return {
@@ -147,21 +165,25 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         }
 
     # Only provide direct stream_url if storage gave a direct HLS / mp4 link or as fallback when no embed
-    stream_url = None
-    if hls_url:
-        stream_url = hls_url
-    elif playback_url and not embed_url and storage_provider != "media_cm":
-        stream_url = playback_url
-    elif not embed_url and not is_yt_valid and lecture.source_url and any(lecture.source_url.lower().endswith(ext) for ext in (".m3u8", ".mp4")):
-        stream_url = lecture.source_url
+    if not stream_url:
+        if hls_url:
+            stream_url = hls_url
+        elif playback_url and not embed_url and storage_provider != "media_cm":
+            stream_url = playback_url
+        elif not embed_url and not is_yt_valid and lecture.source_url and any(lecture.source_url.lower().endswith(ext) for ext in (".m3u8", ".mp4")):
+            stream_url = lecture.source_url
 
     pdf_url = lecture.source_pdf_url or (f"/api/v1/pdfs/{lecture.id}/content" if lecture.pdf else None)
+
+    # When high-speed Telegram or storage stream is available, NEVER return youtube_video_id to player
+    effective_yt_id = None if has_storage_video else (video.youtube_video_id if is_yt_valid else None)
+
     return {
         "has_video": True,
         "has_pdf": lecture.has_pdf,
         "title": lecture.title,
         "duration": video.duration if video else 0,
-        "youtube_video_id": video.youtube_video_id if is_yt_valid else None,
+        "youtube_video_id": effective_yt_id,
         "stream_url": stream_url,
         "playback_url": playback_url,
         "embed_url": embed_url,

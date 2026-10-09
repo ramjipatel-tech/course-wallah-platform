@@ -166,6 +166,7 @@ async def test_lecture_access_returns_telegram_stream_url():
         data = res.json()
         assert data["has_video"] is True
         assert data["storage_provider"] == "telegram"
+        assert data["youtube_video_id"] is None
         assert data["stream_url"] == "/api/v1/stream/tg/554433"
         assert data["playback_url"] == "/api/v1/stream/tg/554433"
         assert data["embed_url"] is None

@@ -924,18 +924,26 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
   
+  const isTelegramStream = Boolean(
+    access.storage_provider === 'telegram' ||
+    access.storage_provider === 'telegram_stream' ||
+    (access.stream_url && access.stream_url.includes('/stream/tg/'))
+  );
+
   const isMediaCm = Boolean(
-    access.storage_provider === 'media_cm' ||
-    (access.playback_url && access.playback_url.includes('media.cm')) ||
-    (access.embed_url && access.embed_url.includes('media.cm'))
+    !isTelegramStream && (
+      access.storage_provider === 'media_cm' ||
+      (access.playback_url && access.playback_url.includes('media.cm')) ||
+      (access.embed_url && access.embed_url.includes('media.cm'))
+    )
   );
   const mediaCmUrl = access.playback_url || (access.embed_url && !access.embed_url.includes('/embed-') ? access.embed_url : null) || (access.embed_url ? `https://media.cm/${access.embed_url.split('/embed-')[1]?.split('.html')[0]}` : null);
   
-  const isEmbed = Boolean(access.embed_url && !isMediaCm);
+  const isEmbed = Boolean(access.embed_url && !isMediaCm && !isTelegramStream);
   const effectiveEmbedUrl = access.embed_url;
-  const isDirectHls = Boolean(!isEmbed && !isMediaCm && access.stream_url && (access.stream_url.includes('.m3u8') || access.stream_url.endsWith('.m3u8')));
-  const isDirectVideo = Boolean(!isEmbed && !isMediaCm && access.stream_url && !isDirectHls);
-  const hasYouTube = Boolean(!isEmbed && !isMediaCm && !isDirectHls && !isDirectVideo && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const isDirectHls = Boolean(!isEmbed && !isMediaCm && !isTelegramStream && access.stream_url && (access.stream_url.includes('.m3u8') || access.stream_url.endsWith('.m3u8')));
+  const isDirectVideo = Boolean(isTelegramStream || (!isEmbed && !isMediaCm && access.stream_url && !isDirectHls));
+  const hasYouTube = Boolean(!isTelegramStream && !isEmbed && !isMediaCm && !isDirectHls && !isDirectVideo && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && !access.youtube_video_id.startsWith('tg_') && access.youtube_video_id !== 'dQw4w9WgXcQ');
   const detectedQuality = (access.player_config && access.player_config.quality) ? access.player_config.quality : '1080p';
 
   container.innerHTML = `
