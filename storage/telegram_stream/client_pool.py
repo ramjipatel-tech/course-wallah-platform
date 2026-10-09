@@ -314,24 +314,31 @@ class TelegramClientPool:
         bytes_sent = 0
 
         first_chunk = True
-        async for chunk in client.stream_media(media, offset=chunk_offset, limit=chunk_count):
-            if not chunk:
-                continue
+        try:
+            async for chunk in client.stream_media(media, offset=chunk_offset, limit=chunk_count):
+                if not chunk:
+                    continue
 
-            if first_chunk:
-                first_chunk = False
-                if bytes_to_skip_in_first_chunk > 0:
-                    if bytes_to_skip_in_first_chunk < len(chunk):
-                        chunk = chunk[bytes_to_skip_in_first_chunk:]
-                    else:
-                        bytes_to_skip_in_first_chunk -= len(chunk)
-                        continue
+                if first_chunk:
+                    first_chunk = False
+                    if bytes_to_skip_in_first_chunk > 0:
+                        if bytes_to_skip_in_first_chunk < len(chunk):
+                            chunk = chunk[bytes_to_skip_in_first_chunk:]
+                        else:
+                            bytes_to_skip_in_first_chunk -= len(chunk)
+                            continue
 
-            if bytes_sent + len(chunk) > bytes_needed:
-                chunk = chunk[: (bytes_needed - bytes_sent)]
+                if bytes_sent + len(chunk) > bytes_needed:
+                    chunk = chunk[: (bytes_needed - bytes_sent)]
 
-            yield chunk
-            bytes_sent += len(chunk)
+                yield chunk
+                bytes_sent += len(chunk)
 
-            if bytes_sent >= bytes_needed:
-                break
+                if bytes_sent >= bytes_needed:
+                    break
+        except (asyncio.CancelledError, GeneratorExit, ConnectionResetError, BrokenPipeError):
+            logger.debug(f"[STREAM_CLIENT_DISCONNECT] Client closed stream early for msg_id={message_id}")
+            return
+        except Exception as stream_err:
+            logger.warning(f"[STREAM_CHUNK_ERR] msg_id={message_id}: {stream_err}")
+            return
