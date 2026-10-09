@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List, AsyncGenerator, Tuple
 from collections import OrderedDict
 
 from pyrogram import Client
+from pyrogram.enums import ParseMode
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
 
@@ -209,6 +210,7 @@ class TelegramClientPool:
             chat_id=target_chat,
             video=file_path,
             caption=caption[:1024] if caption else None,
+            parse_mode=ParseMode.HTML,
             duration=int(duration) if duration else 0,
             width=width or 1920,
             height=height or 1080,

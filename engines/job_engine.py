@@ -789,9 +789,16 @@ class ContentProcessingEngine:
                         title=item.title,
                         metadata={
                             "subject": subject_name,
+                            "subject_name": subject_name,
                             "folder": folder_name,
-                            "lecture_index": item.index,
+                            "folder_name": folder_name,
+                            "unit_number": unit_number,
+                            "batch_name": controller.batch_name if controller else batch_slug,
                             "batch_id": str(batch_id),
+                            "lecture_index": item.index,
+                            "duration": video_duration,
+                            "resolution": video_resolution,
+                            "thumbnail_path": thumb_path,
                         },
                         progress_ui_callback=_storage_ui_callback,
                     )

@@ -169,3 +169,64 @@ async def test_lecture_access_returns_telegram_stream_url():
         assert data["stream_url"] == "/api/v1/stream/tg/554433"
         assert data["playback_url"] == "/api/v1/stream/tg/554433"
         assert data["embed_url"] is None
+
+
+def test_caption_formatter_matches_design_template():
+    from storage.telegram_stream.caption_formatter import format_telegram_channel_caption
+
+    caption = format_telegram_channel_caption(
+        title="Class-128 | Preposition Practice",
+        metadata={
+            "lecture_index": 9,
+            "subject_name": "Rakesh Sir & Team.",
+            "batch_name": "SSC Pratham Batch-02",
+            "folder_name": "English — Vocab (Live",
+            "unit_number": "4",
+            "topic_name": "Vocab (Live",
+            "resolution": "720p",
+            "width": 1280,
+            "height": 720,
+        },
+        width=1280,
+        height=720,
+        resolution="720p"
+    )
+
+    assert "<blockquote>——— ✦ 009 ✦——— ❞</blockquote>" in caption
+    assert "<blockquote>📚 Rakesh Sir &amp; Team. ❞</blockquote>" in caption
+    assert "<blockquote>📖 SSC Pratham Batch-02 ❞</blockquote>" in caption
+    assert "<blockquote>📌 Unit 4 — English — Vocab (Live ❞</blockquote>" in caption
+    assert "<blockquote>📝 Topic : Vocab (Live ❞</blockquote>" in caption
+    assert "<blockquote>🎬 Title : ) Class-128 | Preposition Practice ❞</blockquote>" in caption
+    assert "<blockquote>├── Extention : ∮◯⚡ Course Wallah 🎓 🔥.mp4 ❞\n├── Resolution : 720p (1280 × 720)</blockquote>" in caption
+    assert "<blockquote>📚 Subject » Rakesh Sir &amp; Team. ❞</blockquote>" in caption
+    assert "<blockquote>📚 Course » SSC Pratham Batch-02 ❞</blockquote>" in caption
+    assert "<blockquote>🌟 Extracted By : ∮◯⚡ 🅲🅾🆄🆁🆂🅴 🆆🅰🅻🅻🅰🅷 💻 ❞\n∮◯🎓🔥</blockquote>" in caption
+    assert len(caption) <= 1024
+
+
+def test_caption_formatter_html_escape_and_truncation():
+    from storage.telegram_stream.caption_formatter import format_telegram_channel_caption
+
+    # Test with special HTML characters
+    caption = format_telegram_channel_caption(
+        title="<Math> & Science: 100% <Real>",
+        metadata={
+            "lecture_index": 1,
+            "subject_name": "Physics & Chemistry <Advanced>",
+            "batch_name": "NEET 2026 > Ultimate",
+            "folder_name": "Optics & Waves",
+            "topic_name": "Ray Optics",
+        }
+    )
+    assert "&lt;Math&gt; &amp; Science: 100% &lt;Real&gt;" in caption
+    assert "Physics &amp; Chemistry &lt;Advanced&gt;" in caption
+    assert "NEET 2026 &gt; Ultimate" in caption
+    assert len(caption) <= 1024
+
+    # Test with massive length
+    long_title = "A" * 1500
+    caption_long = format_telegram_channel_caption(title=long_title)
+    assert len(caption_long) <= 1024
+    assert caption_long.endswith("∮◯🎓🔥</blockquote>")
+

@@ -6,6 +6,7 @@ import asyncio
 import urllib.parse
 from typing import Dict, Any, Optional, List, Tuple, Union, Set, Callable
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 from pyrogram.errors import MessageNotModified, RPCError
 from pyrogram.types import (
     Message,
@@ -33,6 +34,7 @@ from validators.image_validator import validate_image_url
 from storage.health import StorageHealthService
 from storage.manager import MultiStorageManager
 from storage.telegram_stream.client_pool import TelegramClientPool
+from storage.telegram_stream.caption_formatter import format_telegram_channel_caption
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +80,30 @@ async def publish_video_to_telegram_stream_and_db(
     caption = message.caption or ""
     title = custom_title or caption or (Path(file_name).stem if file_name else f"Lecture Video {int(time.time())}")
 
+    tg_caption = format_telegram_channel_caption(
+        title=title,
+        metadata={
+            "subject_name": "Direct Uploads",
+            "batch_name": "Direct Video Streams",
+            "folder_name": "Telegram Cloud Stream",
+            "lecture_index": 1,
+            "width": width,
+            "height": height,
+            "resolution": resolution,
+        },
+        width=width,
+        height=height,
+        resolution=resolution,
+    )
+
     # 2. Copy/Send to Telegram Storage Channel
     storage_msg = None
     try:
-        storage_msg = await message.copy(chat_id=storage_chat_id)
+        storage_msg = await message.copy(
+            chat_id=storage_chat_id,
+            caption=tg_caption,
+            parse_mode=ParseMode.HTML
+        )
     except Exception as copy_err:
         logger.warning("Could not copy message directly (%s), attempting forwarding/sending...", copy_err)
         try:
@@ -953,10 +975,27 @@ def register_handlers(app: Client):
                         pool = TelegramClientPool.get_instance()
                         storage_chat = pool.storage_chat_id or OWNER_ID
 
+                        stream_caption = format_telegram_channel_caption(
+                            title=custom_title,
+                            metadata={
+                                "subject_name": "Direct Uploads",
+                                "batch_name": "Direct Video Streams",
+                                "folder_name": "Telegram Cloud Stream",
+                                "lecture_index": 1,
+                                "width": 1920,
+                                "height": 1080,
+                                "resolution": "1080p",
+                            },
+                            width=1920,
+                            height=1080,
+                            resolution="1080p",
+                        )
+
                         sent_msg = await client.send_video(
                             chat_id=storage_chat,
                             video=downloaded_path,
-                            caption=f"🎬 <b>{custom_title}</b>",
+                            caption=stream_caption,
+                            parse_mode=ParseMode.HTML,
                             supports_streaming=True
                         )
 

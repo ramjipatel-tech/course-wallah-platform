@@ -16,6 +16,7 @@ from storage.base import (
     StorageProviderStatus,
 )
 from storage.telegram_stream.client_pool import TelegramClientPool
+from storage.telegram_stream.caption_formatter import format_telegram_channel_caption
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,25 @@ class TelegramStreamStorageProvider(BaseVideoStorageProvider):
         meta = metadata or {}
         duration = int(meta.get("duration", 0) or 0)
         thumb_path = meta.get("thumbnail_path")
+        width = meta.get("width")
+        height = meta.get("height")
+        resolution = meta.get("resolution")
+
+        caption_text = format_telegram_channel_caption(
+            title=title,
+            metadata=meta,
+            width=width,
+            height=height,
+            resolution=resolution,
+        )
 
         try:
             res = await self.pool.upload_video(
                 file_path=file_path,
-                caption=f"🎬 {title}\n📁 Batch: {meta.get('batch_id', 'General')}\n⚡ Course Wallah Secure Stream",
+                caption=caption_text,
                 duration=duration,
+                width=width,
+                height=height,
                 thumb_path=thumb_path,
                 progress_cb=progress_cb,
             )
