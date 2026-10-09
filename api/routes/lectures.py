@@ -115,8 +115,8 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
             if st.status in ("READY", "PROCESSING", VideoStorageStatus.READY.value, VideoStorageStatus.PROCESSING.value):
                 if st.provider == "media_cm":
                     filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
-                    embed_url = f"https://media.cm/embed-{filecode}.html"
                     playback_url = f"https://media.cm/{filecode}"
+                    embed_url = None  # Media.cm free tier blocks iframe embed for >100MB files; use Cinema launcher
                 else:
                     if st.embed_url:
                         embed_url = st.embed_url.strip()
@@ -143,7 +143,7 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     stream_url = None
     if hls_url:
         stream_url = hls_url
-    elif playback_url:
+    elif playback_url and not embed_url and storage_provider != "media_cm":
         stream_url = playback_url
     elif not embed_url and not is_yt_valid and lecture.source_url and any(lecture.source_url.lower().endswith(ext) for ext in (".m3u8", ".mp4")):
         stream_url = lecture.source_url
@@ -156,6 +156,7 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         "duration": video.duration if video else 0,
         "youtube_video_id": video.youtube_video_id if is_yt_valid else None,
         "stream_url": stream_url,
+        "playback_url": playback_url,
         "embed_url": embed_url,
         "storage_provider": storage_provider,
         "pdf_download_url": pdf_url,

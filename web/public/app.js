@@ -923,16 +923,19 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
-  const isEmbed = Boolean(access.embed_url);
-  let effectiveEmbedUrl = access.embed_url;
-  if (effectiveEmbedUrl && effectiveEmbedUrl.includes('media.cm/') && !effectiveEmbedUrl.includes('/embed-')) {
-    const parts = effectiveEmbedUrl.split('?')[0].split('/');
-    const code = parts[parts.length - 1];
-    effectiveEmbedUrl = `https://media.cm/embed-${code}.html`;
-  }
-  const isDirectHls = Boolean(!isEmbed && access.stream_url);
-  const hasYouTube = Boolean(!isEmbed && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
-  const detectedQuality = (access.player_config && access.player_config.quality) ? access.player_config.quality : '480p';
+  
+  const isMediaCm = Boolean(
+    access.storage_provider === 'media_cm' ||
+    (access.playback_url && access.playback_url.includes('media.cm')) ||
+    (access.embed_url && access.embed_url.includes('media.cm'))
+  );
+  const mediaCmUrl = access.playback_url || (access.embed_url && !access.embed_url.includes('/embed-') ? access.embed_url : null) || (access.embed_url ? `https://media.cm/${access.embed_url.split('/embed-')[1]?.split('.html')[0]}` : null);
+  
+  const isEmbed = Boolean(access.embed_url && !isMediaCm);
+  const effectiveEmbedUrl = access.embed_url;
+  const isDirectHls = Boolean(!isEmbed && !isMediaCm && access.stream_url);
+  const hasYouTube = Boolean(!isEmbed && !isMediaCm && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const detectedQuality = (access.player_config && access.player_config.quality) ? access.player_config.quality : '1080p';
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
@@ -983,6 +986,32 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               style="width:100%; height:100%; min-height:480px; border:0; border-radius:12px; background:#000;"
             ></iframe>
+          ` : (isMediaCm && mediaCmUrl ? `
+            <div class="cinema-stream-card" onclick="openCinemaPlayer('${mediaCmUrl}')">
+              <div class="cinema-stream-backdrop" style="background-image: url('${lecture.thumbnail_url || '/static/logo.png'}');"></div>
+              <div class="cinema-stream-overlay">
+                <div class="cinema-stream-top">
+                  <div class="cinema-badge-secure">
+                    <span class="cinema-pulse-dot"></span>
+                    <span>MEDIA.CM SECURE STREAM</span>
+                  </div>
+                  <span class="cinema-badge-res">${detectedQuality.toUpperCase()} ULTRA HD</span>
+                </div>
+                <div class="cinema-play-center">
+                  <div class="cinema-play-btn-glow">
+                    <svg viewBox="0 0 24 24" width="36" height="36" fill="#FFFFFF"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </div>
+                  <h2 class="cinema-play-title">${escapeHtml(lecture.title)}</h2>
+                  <p class="cinema-play-sub">Official high-bandwidth direct stream ready with zero buffering.</p>
+                </div>
+                <div class="cinema-stream-bottom">
+                  <button class="btn-cinema-launch" onclick="event.stopPropagation(); openCinemaPlayer('${mediaCmUrl}')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Launch in Ultra HD Cinema Player &rarr;</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           ` : (isDirectHls ? `
             <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
               <source src="${access.stream_url}" type="application/x-mpegURL" />
@@ -1002,7 +1031,7 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span style="font-weight:600; font-size:16px; color:#F8FAFC;">${escapeHtml(access.message || access.error || 'Video Stream Unavailable')}</span>
               <span style="font-size:13px; color:#94A3B8; margin-top:6px;">This lecture does not have an active video stream or is being processed.</span>
             </div>
-          `))}
+          `)))}
 
           <!-- Seamless Top Overlay Bar (For YouTube embed to mask branding) -->
           ${hasYouTube && !isDirectHls && !isEmbed && !isMediaCm ? `
