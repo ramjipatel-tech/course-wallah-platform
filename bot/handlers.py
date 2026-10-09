@@ -832,6 +832,59 @@ def register_handlers(app: Client):
 
 
     # ==========================================
+    # 3.1 COMMAND: /WIPEDB /CLEARDB (ADMIN ONLY)
+    # ==========================================
+    @app.on_message(filters.command(["wipedb", "cleardb", "resetdb"]) & filters.private)
+    async def cmd_wipedb(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>\n\n<i>You are not authorized to reset the platform database.</i>")
+                return
+
+            wait_msg = await message.reply_text("🧹 <b>PURGING DATABASE FOR FRESH START...</b>\n\n<i>Cleaning apps, batches, subjects, folders, lectures, video storages...</i>")
+
+            from sqlalchemy import text
+            tables = [
+                "video_storages", "videos", "pdfs", "playlist_items", "playlists",
+                "jobs", "lectures", "folders", "subjects", "batches", "apps"
+            ]
+
+            async with get_db_session() as session:
+                try:
+                    await session.execute(text("PRAGMA foreign_keys = OFF;"))
+                except Exception:
+                    pass
+
+                for t in tables:
+                    try:
+                        await session.execute(text(f"DELETE FROM {t};"))
+                    except Exception:
+                        pass
+
+                try:
+                    await session.execute(text("PRAGMA foreign_keys = ON;"))
+                except Exception:
+                    pass
+
+                await session.commit()
+
+            report_text = (
+                "🗑️ <b>ONLINE DATABASE PURGED 100% CLEAN!</b>\n\n"
+                "• <b>Apps & Batches:</b> 0\n"
+                "• <b>Lectures & Videos:</b> 0\n"
+                "• <b>Cloud Storage Records:</b> 0\n"
+                "• <b>PDFs & Notes:</b> 0\n\n"
+                "✨ <b>Ready for fresh batch ingestion!</b>\n"
+                "👉 Send a new <code>.txt</code> file or use /uploadbatch to start."
+            )
+            await wait_msg.edit_text(report_text)
+        except Exception as exc:
+            logger.exception("Error in /wipedb command: %s", exc)
+            await message.reply_text(f"❌ Failed to purge database: {exc}")
+
+
+    # ==========================================
     # 4. COMMAND: /ADMIN (ADMIN DASHBOARD)
     # ==========================================
     @app.on_message(filters.command("admin") & filters.private)

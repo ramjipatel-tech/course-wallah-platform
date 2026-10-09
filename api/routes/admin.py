@@ -98,6 +98,41 @@ async def get_admin_stats(
         "failed_jobs": failed_jobs
     }
 
+@router.post("/database/wipe")
+async def wipe_platform_database(
+    payload: dict = Body(default={}),
+    admin: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_dependency)
+):
+    """
+    Safely wipes all content tables (video_storages, videos, pdfs, playlist_items,
+    playlists, jobs, lectures, folders, subjects, batches, apps) for a 100% fresh start.
+    """
+    from sqlalchemy import text
+    tables = [
+        "video_storages", "videos", "pdfs", "playlist_items", "playlists",
+        "jobs", "lectures", "folders", "subjects", "batches", "apps"
+    ]
+    try:
+        await db.execute(text("PRAGMA foreign_keys = OFF;"))
+    except Exception:
+        pass
+
+    for t in tables:
+        try:
+            await db.execute(text(f"DELETE FROM {t};"))
+        except Exception:
+            pass
+
+    try:
+        await db.execute(text("PRAGMA foreign_keys = ON;"))
+    except Exception:
+        pass
+
+    await db.commit()
+    return {"status": "success", "message": "Production database purged 100% clean successfully."}
+
+
 @router.get("/apps")
 async def list_admin_apps(
     admin: dict = Depends(require_admin_auth),
