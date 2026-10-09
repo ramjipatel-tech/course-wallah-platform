@@ -109,11 +109,18 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     storage_provider = None
 
     if video and video.storages:
-        provider_order = {"vcdn": 1, "vevocloud": 2, "anonmp4": 3, "media_cm": 4}
+        provider_order = {"telegram": 1, "vcdn": 2, "vevocloud": 3, "anonmp4": 4, "media_cm": 5}
         sorted_storages = sorted(video.storages, key=lambda s: provider_order.get(s.provider, 99))
         for st in sorted_storages:
             if st.status in ("READY", "PROCESSING", VideoStorageStatus.READY.value, VideoStorageStatus.PROCESSING.value):
-                if st.provider == "media_cm":
+                if st.provider == "telegram":
+                    msg_id = st.provider_video_id
+                    tg_url = f"/api/v1/stream/tg/{msg_id}"
+                    stream_url = tg_url
+                    playback_url = tg_url
+                    hls_url = tg_url
+                    embed_url = None
+                elif st.provider == "media_cm":
                     filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
                     playback_url = f"https://media.cm/{filecode}"
                     embed_url = None  # Media.cm free tier blocks iframe embed for >100MB files; use Cinema launcher
@@ -124,7 +131,7 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
                         hls_url = st.hls_url.strip()
                     if st.playback_url:
                         playback_url = st.playback_url.strip()
-                if embed_url or hls_url or playback_url:
+                if embed_url or hls_url or playback_url or stream_url:
                     storage_provider = st.provider
                     has_storage_video = True
                     break

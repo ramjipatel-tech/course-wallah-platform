@@ -20,7 +20,8 @@ from api.routes import (
     admin_router,
     auth_router,
     ai_router,
-    contact_router
+    contact_router,
+    stream_router
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,20 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Course Wallah Backend API starting up...")
     await init_db()
+    # Initialize Telegram streaming client pool if credentials configured
+    try:
+        from storage.telegram_stream.client_pool import TelegramClientPool
+        pool = TelegramClientPool.get_instance()
+        await pool.start()
+    except Exception as pool_err:
+        logger.warning(f"Telegram streaming pool startup notice: {pool_err}")
     yield
+    try:
+        from storage.telegram_stream.client_pool import TelegramClientPool
+        pool = TelegramClientPool.get_instance()
+        await pool.stop()
+    except Exception:
+        pass
     logger.info("Course Wallah Backend API shutting down...")
 
 app = FastAPI(
@@ -63,6 +77,7 @@ for pfx in ["/api", "/api/v1"]:
     app.include_router(apps_router, prefix=pfx)
     app.include_router(batches_router, prefix=pfx)
     app.include_router(lectures_router, prefix=pfx)
+    app.include_router(stream_router, prefix=pfx)
     app.include_router(pdfs_router, prefix=pfx)
     app.include_router(search_router, prefix=pfx)
     app.include_router(auth_router, prefix=pfx)

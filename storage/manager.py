@@ -26,6 +26,7 @@ from storage.providers.vcdn import VcdnStorageProvider
 from storage.providers.media_cm import MediaCmStorageProvider
 from storage.providers.anonmp4 import AnonMp4StorageProvider
 from storage.providers.vevocloud import VevocloudStorageProvider
+from storage.providers.telegram_stream import TelegramStreamStorageProvider
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,8 @@ logger = logging.getLogger(__name__)
 class MultiStorageManager:
     """
     Central Orchestrator for Multi-Storage Cloud Video Replication.
-    Enforces sequential ingest across 4 providers:
-    VCDN -> Media.cm -> AnonMP4 -> Vevocloud.
+    Enforces sequential ingest across providers:
+    Telegram Stream (Direct HTML5) -> VCDN -> Media.cm -> AnonMP4 -> Vevocloud.
     
     Features:
     - Zero duplicate uploads via SHA-256 content addressing.
@@ -53,16 +54,17 @@ class MultiStorageManager:
         required_providers: Optional[List[str]] = None,
     ):
         self.providers: List[BaseVideoStorageProvider] = providers or [
-            VcdnStorageProvider(priority=1),
-            MediaCmStorageProvider(priority=2),
-            AnonMp4StorageProvider(priority=3),
-            VevocloudStorageProvider(priority=4),
+            TelegramStreamStorageProvider(priority=1),
+            VcdnStorageProvider(priority=2),
+            MediaCmStorageProvider(priority=3),
+            AnonMp4StorageProvider(priority=4),
+            VevocloudStorageProvider(priority=5),
         ]
         # Sort by priority
         self.providers.sort(key=lambda p: p.priority)
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.required_providers = required_providers or STORAGE_REQUIRED_PROVIDERS or ["media_cm"]
+        self.required_providers = required_providers or STORAGE_REQUIRED_PROVIDERS or ["telegram", "media_cm"]
 
     async def replicate_video(
         self,

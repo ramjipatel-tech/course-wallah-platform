@@ -96,8 +96,19 @@ API_URL = os.environ.get("API_URL", "http://localhost:8000")
 # MULTI-STORAGE REPLICATION PROVIDERS
 # ==========================================
 
-# 1. VCDN Provider Settings
-VCDN_ENABLED = os.environ.get("VCDN_ENABLED", "true").lower() == "true"
+# 0. Telegram Direct Stream Provider Settings (Unlimited Zero-Cost In-App Streaming)
+TELEGRAM_STREAM_ENABLED = os.environ.get("TELEGRAM_STREAM_ENABLED", "true").lower() == "true"
+raw_tg_storage_channel = os.environ.get("TELEGRAM_STORAGE_CHANNEL_ID", "").strip()
+if raw_tg_storage_channel and (raw_tg_storage_channel.startswith("-") or raw_tg_storage_channel.isdigit()):
+    TELEGRAM_STORAGE_CHANNEL_ID = int(raw_tg_storage_channel)
+else:
+    TELEGRAM_STORAGE_CHANNEL_ID = OWNER_ID
+
+TELEGRAM_WORKER_TOKENS = []
+raw_workers = os.environ.get("TELEGRAM_WORKER_TOKENS", "").strip()
+if raw_workers:
+    TELEGRAM_WORKER_TOKENS = [t.strip() for t in raw_workers.split(",") if t.strip()]
+
 # 1. VCDN Provider Settings
 VCDN_ENABLED = os.environ.get("VCDN_ENABLED", "true").lower() == "true"
 VCDN_API_KEY = re.sub(r"[\r\n\t\s]+", "", os.environ.get("VCDN_API_KEY", ""))

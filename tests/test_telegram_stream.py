@@ -1,0 +1,171 @@
+import os
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from httpx import AsyncClient, ASGITransport
+
+from storage.telegram_stream.client_pool import TelegramClientPool, LRUHeaderCache
+from storage.providers.telegram_stream import TelegramStreamStorageProvider
+from storage.base import StorageProviderStatus
+from api.server import app
+from db.connection import get_db_session
+from db.models import (
+    App, Batch, Subject, Folder, Lecture, Video,
+    VideoStorage, VideoStorageStatus, PublicationStatus
+)
+
+
+@pytest.mark.asyncio
+async def test_lru_header_cache():
+    cache = LRUHeaderCache(max_items=2)
+    cache.set_header("item1", b"header1", {"file_size": 100})
+    cache.set_header("item2", b"header2", {"file_size": 200})
+
+    assert cache.get_header("item1") == b"header1"
+    assert cache.get_meta("item1") == {"file_size": 100}
+
+    # Adding a 3rd item should evict oldest (item2 since item1 was touched)
+    cache.set_header("item3", b"header3", {"file_size": 300})
+    assert cache.get_header("item3") == b"header3"
+    assert cache.get_header("item1") == b"header1"
+    assert cache.get_header("item2") is None
+
+
+@pytest.mark.asyncio
+async def test_telegram_stream_storage_provider_upload(tmp_path):
+    video_file = tmp_path / "test_lecture.mp4"
+    video_file.write_bytes(b"dummy video content for telegram stream testing" * 100)
+
+    provider = TelegramStreamStorageProvider(enabled=True)
+
+    mock_pool_res = {
+        "success": True,
+        "message_id": 998877,
+        "chat_id": 123456,
+        "file_id": "BAADBAAD_test_file_id",
+        "file_size": os.path.getsize(str(video_file)),
+        "mime_type": "video/mp4",
+        "file_name": "test_lecture.mp4",
+    }
+
+    with patch.object(provider.pool, "upload_video", new=AsyncMock(return_value=mock_pool_res)):
+        res = await provider.upload(
+            file_path=str(video_file),
+            title="Introduction to Digital Electronics",
+            metadata={"batch_id": "test_batch", "duration": 120}
+        )
+
+        assert res.success is True
+        assert res.status == StorageProviderStatus.READY.value
+        assert res.provider == "telegram"
+        assert res.provider_video_id == "998877"
+        assert res.playback_url == "/api/v1/stream/tg/998877"
+        assert res.hls_url == "/api/v1/stream/tg/998877"
+        assert res.embed_url is None
+
+
+@pytest.mark.asyncio
+async def test_fastapi_stream_endpoint_range_requests():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        pool = TelegramClientPool.get_instance()
+
+        mock_media = MagicMock()
+        mock_media.file_size = 5000000  # 5 MB
+        mock_media.mime_type = "video/mp4"
+        mock_media.file_name = "lecture_998877.mp4"
+
+        async def fake_stream_range(chat_id, msg_id, start, end, chunk_size=1024*1024):
+            # Yield simulated byte chunks
+            chunk = b"A" * (end - start + 1)
+            yield chunk
+
+        with patch.object(pool, "get_media_info", new=AsyncMock(return_value=(mock_media, 5000000, "video/mp4"))), \
+             patch.object(pool, "stream_range", side_effect=fake_stream_range):
+
+            # 1. Test HEAD metadata request
+            head_res = await client.head("/api/v1/stream/tg/998877")
+            assert head_res.status_code == 200
+            assert head_res.headers.get("Accept-Ranges") == "bytes"
+            assert head_res.headers.get("Content-Length") == "5000000"
+            assert "video/mp4" in head_res.headers.get("Content-Type")
+
+            # 2. Test Range request: bytes=0-1048575 (First 1MB)
+            range_res = await client.get("/api/v1/stream/tg/998877", headers={"Range": "bytes=0-1048575"})
+            assert range_res.status_code == 206
+            assert range_res.headers.get("Content-Range") == "bytes 0-1048575/5000000"
+            assert range_res.headers.get("Content-Length") == "1048576"
+            assert len(range_res.content) == 1048576
+
+            # 3. Test Range request: Seeking to middle bytes=2000000-2999999
+            seek_res = await client.get("/api/v1/stream/tg/998877", headers={"Range": "bytes=2000000-2999999"})
+            assert seek_res.status_code == 206
+            assert seek_res.headers.get("Content-Range") == "bytes 2000000-2999999/5000000"
+            assert seek_res.headers.get("Content-Length") == "1000000"
+            assert len(seek_res.content) == 1000000
+
+            # 4. Test Invalid Range out of bounds
+            bad_range_res = await client.get("/api/v1/stream/tg/998877", headers={"Range": "bytes=6000000-7000000"})
+            assert bad_range_res.status_code == 416
+
+
+@pytest.mark.asyncio
+async def test_lecture_access_returns_telegram_stream_url():
+    import uuid
+    uid = uuid.uuid4().hex[:8]
+    async with get_db_session() as db:
+        app_rec = App(name=f"Stream App {uid}", slug=f"stream-app-{uid}")
+        db.add(app_rec)
+        await db.flush()
+
+        batch_rec = Batch(app_id=app_rec.id, name=f"Stream Batch {uid}", slug=f"stream-batch-{uid}")
+        db.add(batch_rec)
+        await db.flush()
+
+        subj_rec = Subject(batch_id=batch_rec.id, name=f"Digital Electronics {uid}", slug=f"dig-elec-{uid}")
+        db.add(subj_rec)
+        await db.flush()
+
+        folder_rec = Folder(subject_id=subj_rec.id, name=f"Module 1 {uid}", slug=f"mod-1-{uid}")
+        db.add(folder_rec)
+        await db.flush()
+
+        lec_rec = Lecture(
+            batch_id=batch_rec.id,
+            subject_id=subj_rec.id,
+            folder_id=folder_rec.id,
+            title=f"Lecture 01 - Binary Logic {uid}",
+            slug=f"lec-01-bin-{uid}",
+            lecture_index=1,
+            has_video=True,
+            publication_status=PublicationStatus.PUBLISHED
+        )
+        db.add(lec_rec)
+        await db.flush()
+
+        vid_rec = Video(lecture_id=lec_rec.id, title=f"Lecture 01 - Binary Logic {uid}", duration=1800.0)
+        db.add(vid_rec)
+        await db.flush()
+
+        tg_st = VideoStorage(
+            video_id=vid_rec.id,
+            provider="telegram",
+            status=VideoStorageStatus.READY.value,
+            provider_video_id="554433",
+            playback_url="/api/v1/stream/tg/554433",
+            hls_url="/api/v1/stream/tg/554433",
+        )
+        db.add(tg_st)
+        await db.commit()
+
+        lec_id = lec_rec.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get(f"/api/v1/lectures/{lec_id}/access")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["has_video"] is True
+        assert data["storage_provider"] == "telegram"
+        assert data["stream_url"] == "/api/v1/stream/tg/554433"
+        assert data["playback_url"] == "/api/v1/stream/tg/554433"
+        assert data["embed_url"] is None

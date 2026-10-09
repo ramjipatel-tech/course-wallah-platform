@@ -933,8 +933,9 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   
   const isEmbed = Boolean(access.embed_url && !isMediaCm);
   const effectiveEmbedUrl = access.embed_url;
-  const isDirectHls = Boolean(!isEmbed && !isMediaCm && access.stream_url);
-  const hasYouTube = Boolean(!isEmbed && !isMediaCm && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const isDirectHls = Boolean(!isEmbed && !isMediaCm && access.stream_url && (access.stream_url.includes('.m3u8') || access.stream_url.endsWith('.m3u8')));
+  const isDirectVideo = Boolean(!isEmbed && !isMediaCm && access.stream_url && !isDirectHls);
+  const hasYouTube = Boolean(!isEmbed && !isMediaCm && !isDirectHls && !isDirectVideo && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
   const detectedQuality = (access.player_config && access.player_config.quality) ? access.player_config.quality : '1080p';
 
   container.innerHTML = `
@@ -1012,9 +1013,9 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
                 </div>
               </div>
             </div>
-          ` : (isDirectHls ? `
+          ` : ((isDirectHls || isDirectVideo) ? `
             <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
-              <source src="${access.stream_url}" type="application/x-mpegURL" />
+              <source src="${access.stream_url}" type="${isDirectHls ? 'application/x-mpegURL' : 'video/mp4'}" />
             </video>
           ` : (hasYouTube ? `
             <div class="plyr__video-embed" id="cw-plyr-element">
@@ -1142,9 +1143,9 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
     </div>
   `;
 
-  // Initialize Plyr instance if direct HLS or YouTube
+  // Initialize Plyr instance if direct HLS, MP4 video, or YouTube
   setTimeout(() => {
-    if (isDirectHls || hasYouTube) {
+    if (isDirectHls || isDirectVideo || hasYouTube) {
       initPlyr(access.stream_url);
     }
   }, 100);
@@ -1242,8 +1243,9 @@ function initPlyr(streamUrl) {
     'fullscreen'
   ];
 
-  // If HTML5 video with direct HLS stream
-  if (el.tagName === 'VIDEO' && streamUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
+  // If HTML5 video with direct HLS stream (.m3u8)
+  const isHlsStream = Boolean(streamUrl && (streamUrl.includes('.m3u8') || streamUrl.endsWith('.m3u8')));
+  if (el.tagName === 'VIDEO' && isHlsStream && typeof Hls !== 'undefined' && Hls.isSupported()) {
     const hls = new Hls({
       enableWorker: true,
       lowLatencyMode: false,

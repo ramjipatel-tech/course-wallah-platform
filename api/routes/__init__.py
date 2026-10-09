@@ -7,3 +7,4 @@ from .admin import router as admin_router
 from .auth import router as auth_router
 from .ai import router as ai_router
 from .contact import router as contact_router
+from .stream import router as stream_router
