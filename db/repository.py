@@ -14,6 +14,8 @@ from db.models import (
     Lecture,
     Video,
     VideoPart,
+    VideoStorage,
+    VideoStorageStatus,
     PDF,
     Playlist,
     PlaylistItem,
@@ -528,6 +530,54 @@ class ContentRepository:
 
         await self.session.flush()
         return video
+
+    async def get_video_storages_for_video(self, video_id: str) -> List[VideoStorage]:
+        stmt = select(VideoStorage).where(VideoStorage.video_id == video_id)
+        res = await self.session.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_video_storage_by_provider(self, video_id: str, provider: str) -> Optional[VideoStorage]:
+        stmt = select(VideoStorage).where(
+            and_(VideoStorage.video_id == video_id, VideoStorage.provider == provider)
+        )
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_storage_providers_summary(self) -> Dict[str, Any]:
+        """Returns diagnostic summary of all replicated video storages across providers."""
+        providers = ["vcdn", "media_cm", "anonmp4", "vevocloud"]
+        summary = {}
+        for p in providers:
+            total_stmt = select(func.count(VideoStorage.id)).where(VideoStorage.provider == p)
+            ready_stmt = select(func.count(VideoStorage.id)).where(
+                and_(VideoStorage.provider == p, VideoStorage.status == VideoStorageStatus.READY.value)
+            )
+            failed_stmt = select(func.count(VideoStorage.id)).where(
+                and_(VideoStorage.provider == p, VideoStorage.status == VideoStorageStatus.FAILED.value)
+            )
+            pending_stmt = select(func.count(VideoStorage.id)).where(
+                and_(VideoStorage.provider == p, VideoStorage.status.in_([
+                    VideoStorageStatus.PENDING.value,
+                    VideoStorageStatus.UPLOADING.value,
+                    VideoStorageStatus.PROCESSING.value,
+                    VideoStorageStatus.VERIFYING.value,
+                    VideoStorageStatus.RETRYING.value
+                ]))
+            )
+
+            total = (await self.session.execute(total_stmt)).scalar() or 0
+            ready = (await self.session.execute(ready_stmt)).scalar() or 0
+            failed = (await self.session.execute(failed_stmt)).scalar() or 0
+            pending = (await self.session.execute(pending_stmt)).scalar() or 0
+
+            summary[p] = {
+                "total": total,
+                "ready": ready,
+                "failed": failed,
+                "pending": pending
+            }
+        return summary
+
 
 
     async def attach_pdf_to_lecture(

@@ -88,7 +88,11 @@ def _run_migrations(sync_conn):
             "youtube_channel_id": "VARCHAR(64)",
             "youtube_account_id": "VARCHAR(64)",
             "youtube_url": "VARCHAR(512)",
-            "upload_completed_at": "TIMESTAMP"
+            "upload_completed_at": "TIMESTAMP",
+            "sha256": "VARCHAR(64)",
+            "filename": "VARCHAR(255)",
+            "telegram_message_id": "INTEGER",
+            "telegram_chat_id": "BIGINT"
         }
         for col_name, col_type in col_defs.items():
             if col_name not in existing_cols:

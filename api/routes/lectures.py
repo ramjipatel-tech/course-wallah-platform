@@ -4,7 +4,11 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from db.connection import get_db_dependency
-from db.models import Lecture, Video, PDF, Subject, Folder, Batch, PublicationStatus, Playlist, PlaylistItem
+from db.models import (
+    Lecture, Video, PDF, Subject, Folder, Batch,
+    PublicationStatus, Playlist, PlaylistItem,
+    VideoStorage, VideoStorageStatus
+)
 
 router = APIRouter(prefix="/lectures", tags=["Lectures"])
 
@@ -86,7 +90,10 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     """
     stmt = (
         select(Lecture)
-        .options(selectinload(Lecture.video), selectinload(Lecture.pdf))
+        .options(
+            selectinload(Lecture.video).selectinload(Video.storages),
+            selectinload(Lecture.pdf)
+        )
         .where(Lecture.id == lecture_id)
     )
     res = await db.execute(stmt)
@@ -95,16 +102,30 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Lecture not available or unpublished")
 
     video = lecture.video
-    has_video = bool(video and video.youtube_video_id) or bool(lecture.source_url)
+    has_storage_video = False
+    embed_url = None
+    storage_provider = None
+
+    if video and video.storages:
+        for st in video.storages:
+            if st.status == VideoStorageStatus.READY.value and st.embed_url:
+                embed_url = st.embed_url
+                storage_provider = st.provider
+                has_storage_video = True
+                break
+
+    is_yt_valid = bool(video and video.youtube_video_id and not video.youtube_video_id.startswith(("cw_temp_", "yt_id_", "EXISTING_YT", "YT_PERSIST", "dQw4w9WgXcQ")))
+    has_video = is_yt_valid or bool(lecture.source_url) or has_storage_video
+
     if not has_video:
         return {
             "has_video": False,
             "has_pdf": lecture.has_pdf,
-            "message": "This lecture contains study material only."
+            "message": "This lecture contains study material only or video is being prepared."
         }
 
     stream_url = None
-    if lecture.source_url and any(lecture.source_url.lower().endswith(ext) or ext in lecture.source_url.lower() for ext in (".m3u8", ".mp4", "transcoded-videos", "liveclasses", "stream")):
+    if lecture.source_url and any(lecture.source_url.lower().endswith(ext) or ext in lecture.source_url.lower() for ext in (".m3u8", ".mp4", "transcoded-videos", "liveclasses", "stream", "vcdn")):
         stream_url = lecture.source_url
 
     pdf_url = lecture.source_pdf_url or (f"/api/v1/pdfs/{lecture.id}/content" if lecture.pdf else None)
@@ -113,8 +134,10 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
         "has_pdf": lecture.has_pdf,
         "title": lecture.title,
         "duration": video.duration if video else 0,
-        "youtube_video_id": video.youtube_video_id if video else None,
+        "youtube_video_id": video.youtube_video_id if is_yt_valid else None,
         "stream_url": stream_url,
+        "embed_url": embed_url,
+        "storage_provider": storage_provider,
         "pdf_download_url": pdf_url,
         "player_config": {
             "autoplay": False,

@@ -539,7 +539,8 @@ class TelegramProgressUI:
             ("📥 Download", phase_states.get("download", "⏳")),
             ("💧 Watermark", phase_states.get("watermark", "⏳")),
             ("🖼 Thumbnail", phase_states.get("thumbnail", "⏳")),
-            ("☁️ YouTube", phase_states.get("youtube", "⏳")),
+            ("☁️ Master", phase_states.get("youtube", "⏳")),
+            ("☁️ Replicate", phase_states.get("storage", "⏳" if phase_states.get("download") != "N/A" else "N/A")),
             ("📄 PDF", phase_states.get("pdf", "⏳")),
             ("☁️ B2", phase_states.get("b2", "⏳")),
             ("🗄 Database", phase_states.get("database", "⏳")),
@@ -1050,5 +1051,159 @@ class TelegramProgressUI:
             f"🔒 <b>Security:</b> Tokens encrypted / masked at rest"
         )
 
+    # ==========================================
+    # MULTI-STORAGE REPLICATION UI RENDERERS
+    # ==========================================
+
+    @classmethod
+    def render_storage_replication_card(cls, data: Dict[str, Any]) -> str:
+        title = data.get("title", "Video Lecture")
+        file_size = data.get("file_size", 0)
+        if file_size < 1024 * 1024 * 1024:
+            size_mb = f"{file_size / (1024 * 1024):.2f} MB"
+        else:
+            size_mb = f"{file_size / (1024 * 1024 * 1024):.2f} GB"
+
+        current_p = data.get("current_provider", "vcdn")
+        states = data.get("provider_states", {})
+        completed_c = data.get("completed_count", 0)
+        total_c = data.get("total_providers", 4)
+
+        provider_display_names = {
+            "vcdn": "VCDN",
+            "media_cm": "Media.cm",
+            "anonmp4": "AnonMP4",
+            "vevocloud": "Vevocloud",
+        }
+
+        status_badges = {
+            "PENDING": "⏳ WAITING",
+            "UPLOADING": "⬆️ UPLOADING",
+            "PROCESSING": "⚙️ PROCESSING",
+            "VERIFYING": "🔍 VERIFYING",
+            "READY": "✅ VERIFIED",
+            "RETRYING": "🔄 RETRYING",
+            "FAILED": "❌ FAILED",
+            "DISABLED": "⚪ DISABLED",
+        }
+
+        prov_blocks = []
+        for p_key, p_info in states.items():
+            disp_name = provider_display_names.get(p_key, p_key.upper())
+            st = p_info.get("status", "PENDING")
+            badge = status_badges.get(st, st)
+            prog = p_info.get("progress", 0.0)
+
+            if st == "UPLOADING":
+                bar = make_progress_bar(prog, bar_length=16, style="blocks")
+                prov_blocks.append(f"{disp_name}\n{bar} {prog:4.0f}%\n{badge}")
+            elif st == "READY":
+                bar = make_progress_bar(100.0, bar_length=16, style="blocks")
+                prov_blocks.append(f"{disp_name}\n{bar} 100%\n{badge}")
+            else:
+                bar = make_progress_bar(0.0, bar_length=16, style="blocks")
+                prov_blocks.append(f"{disp_name}\n{bar}\n{badge}")
+
+        providers_text = "\n\n".join(prov_blocks)
+        curr_info = states.get(current_p, {})
+        attempt = curr_info.get("attempt", 1)
+        max_attempts = curr_info.get("max_attempts", 3)
+        curr_disp = provider_display_names.get(current_p, current_p.upper())
+
+        return (
+            f"╭━━━━━━━━━━━━━━━━━━━━━━╮\n"
+            f"│ 🎬 <b>VIDEO PROCESSING</b>   │\n"
+            f"╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+            f"📚 <b>Title:</b>\n"
+            f"{title}\n\n"
+            f"📦 <b>Video:</b>\n"
+            f"{size_mb}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🟢 <b>MASTER</b>\n"
+            f"Telegram        ✅ COMPLETED\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"☁️ <b>STORAGE REPLICATION</b>\n\n"
+            f"{providers_text}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📊 <b>Overall:</b>\n"
+            f"{completed_c} / {total_c} providers completed\n\n"
+            f"⏳ <b>Current:</b>\n"
+            f"{curr_disp}\n\n"
+            f"🔄 <b>Attempt:</b>\n"
+            f"{attempt}/{max_attempts}"
+        )
+
+    @classmethod
+    def render_storage_completed_card(cls, data: Dict[str, Any]) -> str:
+        title = data.get("title", "Video Lecture")
+        states = data.get("provider_states", {})
+        provider_display_names = {
+            "vcdn": "VCDN",
+            "media_cm": "Media.cm",
+            "anonmp4": "AnonMP4",
+            "vevocloud": "Vevocloud",
+        }
+
+        lines = []
+        for p_key, p_info in states.items():
+            disp_name = provider_display_names.get(p_key, p_key.upper())
+            st = p_info.get("status", "PENDING")
+            badge = "✅ VERIFIED" if st == "READY" else ("⚪ DISABLED" if st == "DISABLED" else f"❌ {st}")
+            lines.append(f"{disp_name:<10} {badge}")
+
+        prov_summary = "\n".join(lines)
+        ready_count = data.get("ready_count", len(states))
+        total_count = data.get("total_providers", len(states))
+
+        return (
+            f"╭━━━━━━━━━━━━━━━━━━━━━━╮\n"
+            f"│ 🎬 <b>VIDEO READY</b>        │\n"
+            f"╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+            f"📚 <b>{title}</b>\n\n"
+            f"☁️ <b>Storage Replication</b>\n\n"
+            f"<pre>\n{prov_summary}\n</pre>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📦 <b>Providers:</b>\n"
+            f"{ready_count} / {total_count} Ready\n\n"
+            f"🎞️ <b>Video:</b>\n"
+            f"READY\n\n"
+            f"🗃️ <b>Master:</b>\n"
+            f"Telegram ✅\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🚀 <i>All required storage replicas are ready.</i>"
+        )
+
+    @classmethod
+    def render_storage_incomplete_card(cls, data: Dict[str, Any]) -> str:
+        title = data.get("title", "Video Lecture")
+        states = data.get("provider_states", {})
+        provider_display_names = {
+            "vcdn": "VCDN",
+            "media_cm": "Media.cm",
+            "anonmp4": "AnonMP4",
+            "vevocloud": "Vevocloud",
+        }
+
+        lines = []
+        for p_key, p_info in states.items():
+            disp_name = provider_display_names.get(p_key, p_key.upper())
+            st = p_info.get("status", "PENDING")
+            badge = "✅ READY" if st == "READY" else ("⚪ DISABLED" if st == "DISABLED" else ("❌ FAILED" if st == "FAILED" else f"⏳ {st}"))
+            lines.append(f"{disp_name:<10} {badge}")
+
+        prov_summary = "\n".join(lines)
+        ready_count = data.get("ready_count", 0)
+        total_count = data.get("total_providers", len(states))
+
+        return (
+            f"╭━━━━━━━━━━━━━━━━━━━━━━╮\n"
+            f"│ ⚠️ <b>STORAGE INCOMPLETE</b> │\n"
+            f"╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+            f"📚 <b>{title}</b>\n\n"
+            f"<pre>\n{prov_summary}\n</pre>\n\n"
+            f"📊 <b>{ready_count} / {total_count} READY</b>\n\n"
+            f"⚠️ <i>Video replication is not complete. Local prepared video preserved.</i>"
+        )
 
 
+ProgressUICards = TelegramProgressUI

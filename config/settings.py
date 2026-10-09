@@ -87,3 +87,36 @@ RETRY_DELAY = int(os.environ.get("RETRY_DELAY", "5"))
 SECURITY_TEST_MODE = os.environ.get("SECURITY_TEST_MODE", "true").lower() == "true"
 SITE_URL = os.environ.get("SITE_URL", "http://localhost:3000")
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
+
+# ==========================================
+# MULTI-STORAGE REPLICATION PROVIDERS
+# ==========================================
+
+# 1. VCDN Provider Settings
+VCDN_ENABLED = os.environ.get("VCDN_ENABLED", "true").lower() == "true"
+VCDN_API_KEY = os.environ.get("VCDN_API_KEY", "").strip()
+VCDN_BASE_URL = os.environ.get("VCDN_BASE_URL", "https://cdn.vcdn.me").strip().rstrip("/")
+VCDN_LADDER_PROFILE = os.environ.get("VCDN_LADDER_PROFILE", "standard").strip()
+
+# 2. Media.cm Provider Settings
+MEDIA_CM_ENABLED = os.environ.get("MEDIA_CM_ENABLED", "true").lower() == "true"
+MEDIA_CM_API_KEY = os.environ.get("MEDIA_CM_API_KEY", "").strip()
+MEDIA_CM_BASE_URL = os.environ.get("MEDIA_CM_BASE_URL", "https://media.cm").strip().rstrip("/")
+
+# 3. AnonMP4 Provider Settings
+ANONMP4_ENABLED = os.environ.get("ANONMP4_ENABLED", "true").lower() == "true"
+ANONMP4_API_URL = os.environ.get("ANONMP4_API_URL", "https://anonmp4api.xyz/upload").strip()
+
+# 4. Vevocloud Provider Settings
+VEVOCLOUD_ENABLED = os.environ.get("VEVOCLOUD_ENABLED", "true").lower() == "true"
+VEVOCLOUD_API_KEY = os.environ.get("VEVOCLOUD_API_KEY", "").strip()
+VEVOCLOUD_BASE_URL = os.environ.get("VEVOCLOUD_BASE_URL", "https://www.vevocloud.com").strip().rstrip("/")
+
+# Storage General Policies
+STORAGE_MAX_RETRIES = int(os.environ.get("STORAGE_MAX_RETRIES", "3"))
+STORAGE_RETRY_DELAY = int(os.environ.get("STORAGE_RETRY_DELAY", "5"))
+STORAGE_VERIFY_TIMEOUT = int(os.environ.get("STORAGE_VERIFY_TIMEOUT", "60"))
+STORAGE_CHUNK_SIZE_BYTES = int(os.environ.get("STORAGE_CHUNK_SIZE_BYTES", str(8 * 1024 * 1024))) # 8MB default chunk
+STORAGE_REQUIRED_PROVIDERS = [
+    x.strip().lower() for x in os.environ.get("STORAGE_REQUIRED_PROVIDERS", "media_cm").split(",") if x.strip()
+]

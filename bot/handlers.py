@@ -24,6 +24,8 @@ from engines.youtube_account_manager import YouTubeAccountManager
 from bot.progress_ui import TelegramProgressUI, TelegramMessageThrottler
 from bot.batch_wizard import BatchWizardManager, BatchWizardState
 from validators.image_validator import validate_image_url
+from storage.health import StorageHealthService
+from storage.manager import MultiStorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -711,7 +713,73 @@ def register_handlers(app: Client):
                 await message.reply_text("ℹ️ <b>No paused batch jobs found to resume.</b>")
         except Exception as exc:
             logger.exception("Error in /youtube_resume command: %s", exc)
-            await message.reply_text("❌ Failed to resume YouTube uploads.")
+    # ==========================================
+    # 6.5. MULTI-STORAGE REPLICATION COMMANDS: /STORAGE, /STORAGE_HEALTH, /STORAGE_STATUS
+    # ==========================================
+    @app.on_message(filters.command(["storage", "storage_health", "storage_status"]) & filters.private)
+    async def cmd_storage_status(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            wait_msg = await message.reply_text("🔍 <i>Running live health checks on all 4 storage providers...</i>")
+            health_results = await StorageHealthService.check_all_providers()
+
+            # Query DB statistics
+            async with get_db_session() as session:
+                repo = ContentRepository(session)
+                db_stats = await repo.get_storage_providers_summary()
+
+            prov_lines = []
+            for h in health_results:
+                p_name = h.get("provider", "unknown")
+                status = h.get("status", "UNKNOWN")
+                healthy = h.get("healthy", False)
+                enabled = h.get("enabled", True)
+                p_stat = db_stats.get(p_name, {})
+                ready_c = p_stat.get("ready", 0)
+                failed_c = p_stat.get("failed", 0)
+                total_c = p_stat.get("total", 0)
+
+                if not enabled:
+                    badge = "⚪ DISABLED"
+                elif healthy:
+                    badge = "🟢 ONLINE"
+                else:
+                    badge = f"🔴 {status}"
+
+                disp_name = {
+                    "vcdn": "VCDN",
+                    "media_cm": "Media.cm",
+                    "anonmp4": "AnonMP4",
+                    "vevocloud": "Vevocloud",
+                }.get(p_name, p_name.upper())
+
+                prov_lines.append(
+                    f"<b>{disp_name}</b>: {badge}\n"
+                    f"  • Total: <b>{total_c}</b> | Ready: <b>{ready_c}</b> | Failed: <b>{failed_c}</b>"
+                )
+
+            summary_text = "\n\n".join(prov_lines)
+            card = (
+                f"╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
+                f"│ ☁️ <b>STORAGE REPLICATION</b>    │\n"
+                f"╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+                f"{summary_text}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🛡️ <i>Pipeline: VCDN ➔ Media.cm ➔ AnonMP4 ➔ Vevocloud</i>\n"
+                f"🔒 <i>Zero Duplicates (SHA-256) & Auto-Resumable</i>"
+            )
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Refresh Health", callback_data="admin:storage_health")],
+                [InlineKeyboardButton("👑 Admin Menu", callback_data="admin:menu")]
+            ])
+            await wait_msg.edit_text(card, reply_markup=markup)
+        except Exception as exc:
+            logger.exception("Error in /storage command: %s", exc)
+            await message.reply_text("❌ Failed to retrieve storage diagnostics.")
 
 
     # ==========================================
@@ -1578,6 +1646,64 @@ def register_handlers(app: Client):
             # ----------------------------------------------------
             # ADMIN DASHBOARD & MENU
             # ----------------------------------------------------
+            if data in ("admin:storage_health", "admin:storage_status"):
+                await callback.answer("Running storage health checks...")
+                health_results = await StorageHealthService.check_all_providers()
+                async with get_db_session() as session:
+                    repo = ContentRepository(session)
+                    db_stats = await repo.get_storage_providers_summary()
+
+                prov_lines = []
+                for h in health_results:
+                    p_name = h.get("provider", "unknown")
+                    status = h.get("status", "UNKNOWN")
+                    healthy = h.get("healthy", False)
+                    enabled = h.get("enabled", True)
+                    p_stat = db_stats.get(p_name, {})
+                    ready_c = p_stat.get("ready", 0)
+                    failed_c = p_stat.get("failed", 0)
+                    total_c = p_stat.get("total", 0)
+
+                    if not enabled:
+                        badge = "⚪ DISABLED"
+                    elif healthy:
+                        badge = "🟢 ONLINE"
+                    else:
+                        badge = f"🔴 {status}"
+
+                    disp_name = {
+                        "vcdn": "VCDN",
+                        "media_cm": "Media.cm",
+                        "anonmp4": "AnonMP4",
+                        "vevocloud": "Vevocloud",
+                    }.get(p_name, p_name.upper())
+
+                    prov_lines.append(
+                        f"<b>{disp_name}</b>: {badge}\n"
+                        f"  • Total: <b>{total_c}</b> | Ready: <b>{ready_c}</b> | Failed: <b>{failed_c}</b>"
+                    )
+
+                summary_text = "\n\n".join(prov_lines)
+                card = (
+                    f"╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
+                    f"│ ☁️ <b>STORAGE REPLICATION</b>    │\n"
+                    f"╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+                    f"{summary_text}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🛡️ <i>Pipeline: VCDN ➔ Media.cm ➔ AnonMP4 ➔ Vevocloud</i>\n"
+                    f"🔒 <i>Zero Duplicates (SHA-256) & Auto-Resumable</i>"
+                )
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Refresh Health", callback_data="admin:storage_health")],
+                    [InlineKeyboardButton("👑 Admin Menu", callback_data="admin:menu")]
+                ])
+                try:
+                    await callback.message.edit_text(card, reply_markup=markup)
+                except Exception as e:
+                    if "MESSAGE_NOT_MODIFIED" not in str(e):
+                        raise e
+                return
+
             if data == "admin:youtube_accounts":
                 await callback.answer("Loading YouTube accounts...")
                 diag = await YouTubeAccountManager.get_diagnostics()

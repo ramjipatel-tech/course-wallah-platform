@@ -29,7 +29,13 @@ from engines.video_processor import VideoProcessor
 from engines.youtube_uploader import YouTubeUploader, YouTubeUploadLimitExceededError, YouTubeApiQuotaExceededError
 from engines.youtube_account_manager import YouTubeAccountManager
 from engines.b2_storage import B2StorageManager
-from bot.progress_ui import TelegramProgressUI, TelegramMessageThrottler
+from storage.base import (
+    StorageReplicationError,
+    StorageReplicationProcessingError,
+    StorageReplicationFailedError,
+)
+from storage.manager import MultiStorageManager
+from bot.progress_ui import TelegramProgressUI, TelegramMessageThrottler, ProgressUICards
 
 
 logger = logging.getLogger(__name__)
@@ -251,6 +257,44 @@ class ContentProcessingEngine:
 
                 break
 
+            except StorageReplicationProcessingError as proc_e:
+                controller.pause()
+                controller.failed_count += 1
+                controller.failed_items.append({
+                    "index": item.index,
+                    "title": item.title,
+                    "error": f"Storage Processing: {proc_e}. Remote asset transcoding in progress; prepared artifact preserved in durable checkpoint.",
+                    "storage_processing": True
+                })
+                logger.warning(f"[BATCH_PAUSED_STORAGE_PROCESSING] Batch '{batch_name}' paused at #{item.index}: {proc_e}")
+
+                try:
+                    async with get_db_session() as db_sess:
+                        repo = ContentRepository(db_sess)
+                        db_lec = await repo.get_lecture_by_index(batch_id, item.index)
+                        if db_lec:
+                            db_lec.publication_status = PublicationStatus.PROCESSING
+                except Exception as db_err:
+                    logger.debug(f"[DB_STATUS_UPDATE_NOTICE] {db_err}")
+
+                proc_msg = (
+                    f"⏳ <b>STORAGE REPLICATION IN PROGRESS</b>\n\n"
+                    f"<b>Batch:</b> {batch_name}\n"
+                    f"<b>Paused at:</b> #{item.index} - {item.title}\n\n"
+                    f"Required storage provider ({proc_e.provider}) is transcoding asynchronously on remote servers.\n"
+                    f"Upload is complete, and status verification will resume without re-uploading.\n\n"
+                    f"💾 <i>Prepared video artifacts and remote IDs have been safely checkpointed. Click <b>Resume</b> when remote processing completes.</i>"
+                )
+                try:
+                    from bot.batch_wizard import BatchWizardManager
+                    markup = BatchWizardManager.build_paused_batch_markup(controller.job_id)
+                    if controller.status_message:
+                        await controller.throttler.edit(controller.status_message, proc_msg, reply_markup=markup, force=True)
+                except Exception as ui_e:
+                    logger.debug(f"[UI_STORAGE_PROC_NOTICE] {ui_e}")
+
+                break
+
             except Exception as e:
                 controller.failed_count += 1
                 controller.failed_items.append({
@@ -311,6 +355,7 @@ class ContentProcessingEngine:
         thumb_path = None
         pdf_temp_path = None
         pdf_clean_path = None
+        storage_replication_success = True if not item.video_url else False
 
         phase_states = {
             "download": "⏳",
@@ -475,6 +520,7 @@ class ContentProcessingEngine:
                             item.pdf_url = vu_e.pdf_url
                         item.video_url = None
                         downloaded_video_path = None
+                        storage_replication_success = True
                         
                         # Check metadata from error for thumbnail
                         th_url = vu_e.metadata.get("thumbnail") if hasattr(vu_e, "metadata") and vu_e.metadata else None
@@ -636,7 +682,110 @@ class ContentProcessingEngine:
                     except Exception as yt_check_err:
                         logger.debug(f"[YOUTUBE_STATUS_CHECK_NOTICE] {yt_check_err}")
 
+                # ==========================================
+                # PHASE 4.5: MULTI-STORAGE VIDEO REPLICATION
+                # Sequential 4 Providers: VCDN -> Media.cm -> AnonMP4 -> Vevocloud
+                # ==========================================
+                storage_replication_success = True
+                video_db_id = None
+                async with get_db_session() as v_sess:
+                    v_repo = ContentRepository(v_sess)
+                    lec_rec = await v_repo.get_lecture_by_index(batch_id, item.index)
+                    if lec_rec:
+                        vid_rec = await v_repo.attach_video_to_lecture(
+                            lecture_id=lec_rec.id,
+                            youtube_video_id=youtube_video_id or f"cw_temp_{item.index}",
+                            duration=video_duration,
+                            resolution=video_resolution,
+                            file_size=video_size,
+                            title=item.title,
+                            youtube_channel_id=youtube_channel_id,
+                            youtube_account_id=youtube_account_id,
+                            youtube_url=youtube_url,
+                            upload_completed_at=upload_completed_at or datetime.utcnow(),
+                        )
+                        video_db_id = vid_rec.id
 
+                if video_db_id:
+                    logger.info(f"[STORAGE_REPLICATION_START] lecture_index=#{item.index} video_id={video_db_id}")
+
+                    async def _storage_ui_callback(payload: Dict[str, Any]):
+                        if controller and controller.status_message:
+                            try:
+                                card_text = ProgressUICards.render_storage_replication_card(payload)
+                                markup = None
+                                try:
+                                    from bot.batch_wizard import BatchWizardManager
+                                    markup = BatchWizardManager.build_running_batch_markup(controller.job_id)
+                                except Exception:
+                                    pass
+                                await controller.throttler.edit(
+                                    controller.status_message,
+                                    card_text,
+                                    reply_markup=markup,
+                                    force=payload.get("force", False)
+                                )
+                            except Exception as ui_exc:
+                                logger.debug(f"[STORAGE_UI_NOTICE] {ui_exc}")
+
+                    storage_manager = MultiStorageManager()
+                    storage_res = await storage_manager.replicate_video(
+                        video_id=video_db_id,
+                        video_file_path=watermarked_video_path,
+                        title=item.title,
+                        metadata={
+                            "subject": subject_name,
+                            "folder": folder_name,
+                            "lecture_index": item.index,
+                            "batch_id": str(batch_id),
+                        },
+                        progress_ui_callback=_storage_ui_callback,
+                    )
+                    storage_replication_success = storage_res.get("success", False)
+                    logger.info(
+                        f"[STORAGE_REPLICATION_END] lecture_index=#{item.index} "
+                        f"ready={storage_res.get('ready_count')}/{storage_res.get('total_enabled')} "
+                        f"success={storage_replication_success}"
+                    )
+                    if controller and controller.status_message:
+                        try:
+                            if storage_replication_success:
+                                card_text = ProgressUICards.render_storage_completed_card(storage_res)
+                            else:
+                                card_text = ProgressUICards.render_storage_incomplete_card(storage_res)
+                            await controller.throttler.edit(controller.status_message, card_text, force=True)
+                        except Exception as end_ui_exc:
+                            logger.debug(f"[STORAGE_FINAL_UI_NOTICE] {end_ui_exc}")
+
+                    if not storage_replication_success:
+                        processing_required = storage_res.get("processing_required", [])
+                        failed_required = storage_res.get("failed_required", [])
+
+                        # Save durable checkpoint to preserve prepared watermarked video
+                        YouTubeAccountManager.save_checkpoint(
+                            batch_id=str(batch_id),
+                            lecture_index=item.index,
+                            prepared_video_path=watermarked_video_path,
+                            thumbnail_path=thumb_path,
+                            duration=video_duration,
+                            resolution=video_resolution,
+                            file_size=video_size,
+                            reason="storageReplicationProcessing" if processing_required else "storageReplicationFailed",
+                            stage="STORAGE_REPLICATION_PROCESSING" if processing_required else "STORAGE_REPLICATION_FAILED"
+                        )
+
+                        if processing_required:
+                            proc_names = ", ".join(processing_required)
+                            raise StorageReplicationProcessingError(
+                                f"Required storage provider(s) still processing remotely: {proc_names}",
+                                provider=proc_names
+                            )
+                        else:
+                            fail_names = ", ".join(failed_required) if failed_required else "unknown"
+                            raise StorageReplicationFailedError(
+                                f"Required storage provider(s) failed replication: {fail_names}",
+                                failed_providers=failed_required
+                            )
 
             # ==========================================
             # PHASE 5 & 6: PDF PIPELINE & B2 UPLOAD
@@ -766,10 +915,22 @@ class ContentProcessingEngine:
             return {"status": "SUCCESS", "index": item.index, "title": item.title}
 
         finally:
-            # Temporary scratch cleanup
-            shutil.rmtree(work_dir, ignore_errors=True)
-            if downloaded_video_path and os.path.exists(downloaded_video_path):
-                try:
-                    os.remove(downloaded_video_path)
-                except Exception:
-                    pass
+            if locals().get('storage_replication_success', False):
+                # Temporary scratch cleanup only after all required storage replication succeeded
+                shutil.rmtree(work_dir, ignore_errors=True)
+                if downloaded_video_path and os.path.exists(downloaded_video_path):
+                    try:
+                        os.remove(downloaded_video_path)
+                    except Exception:
+                        pass
+                if 'watermarked_video_path' in locals() and watermarked_video_path and os.path.exists(watermarked_video_path):
+                    try:
+                        if not locals().get('has_valid_checkpoint', False):
+                            os.remove(watermarked_video_path)
+                    except Exception:
+                        pass
+            else:
+                logger.info(
+                    f"[STORAGE_CLEANUP_PROTECTION] Preserving local video files for lecture #{item.index} "
+                    f"because required storage replication is incomplete."
+                )

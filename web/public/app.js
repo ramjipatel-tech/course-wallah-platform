@@ -392,11 +392,11 @@ async function fetchLectureAccess(lectureId) {
     return await res.json();
   } catch (e) {
     return {
-      has_video: true,
-      youtube_video_id: "dQw4w9WgXcQ", // fallback player demo
-      has_pdf: true,
-      pdf_view_url: "/api/pdfs/demo/view",
-      pdf_download_url: "/api/pdfs/demo/download"
+      has_video: false,
+      error: "Video stream is not available or unpublished.",
+      has_pdf: false,
+      pdf_view_url: null,
+      pdf_download_url: null
     };
   }
 }
@@ -924,7 +924,8 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
   const isDirectHls = Boolean(access.stream_url);
-  const hasYouTube = Boolean(access.youtube_video_id);
+  const isEmbed = Boolean(access.embed_url);
+  const hasYouTube = Boolean(access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
@@ -958,7 +959,7 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
         <div class="as-player-subtag">
           <span class="subtag-pill">VIDEO LECTURE</span>
           <span class="subtag-dot">•</span>
-          <span class="subtag-playing">NOW PLAYING</span>
+          <span class="subtag-playing">${access.storage_provider ? `${access.storage_provider.toUpperCase()} SECURE STREAM` : 'NOW PLAYING'}</span>
         </div>
         <h1 class="as-player-title">${escapeHtml(lecture.title)}</h1>
       </div>
@@ -970,6 +971,15 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
             <video id="cw-plyr-element" class="plyr" playsinline controls preload="metadata" data-poster="${lecture.thumbnail_url || '/static/logo.png'}">
               <source src="${access.stream_url}" type="application/x-mpegURL" />
             </video>
+          ` : (isEmbed ? `
+            <iframe
+              src="${access.embed_url}"
+              class="vcdn-iframe-player"
+              allowfullscreen
+              allowtransparency
+              allow="autoplay; fullscreen"
+              style="width:100%; height:100%; min-height:480px; border:0; border-radius:12px; background:#000;"
+            ></iframe>
           ` : (hasYouTube ? `
             <div class="plyr__video-embed" id="cw-plyr-element">
               <iframe
@@ -980,14 +990,15 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               ></iframe>
             </div>
           ` : `
-            <div class="video-placeholder-box">
-              <div class="spinner"></div>
-              <span>Preparing video stream...</span>
+            <div class="video-placeholder-box" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:360px; padding:30px; text-align:center;">
+              <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#6366F1" stroke-width="2" style="margin-bottom:12px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span style="font-weight:600; font-size:16px; color:#F8FAFC;">${escapeHtml(access.message || access.error || 'Video Stream Unavailable')}</span>
+              <span style="font-size:13px; color:#94A3B8; margin-top:6px;">This lecture does not have an active video stream or is being processed.</span>
             </div>
-          `)}
+          `))}
 
           <!-- Seamless Top Overlay Bar (For YouTube embed to mask branding) -->
-          ${hasYouTube && !isDirectHls ? `
+          ${hasYouTube && !isDirectHls && !isEmbed ? `
             <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
               <div class="player-top-brand">
                 <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">

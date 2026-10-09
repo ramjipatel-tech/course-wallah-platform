@@ -207,6 +207,18 @@ class Lecture(Base):
 
 
 # ==========================================
+class VideoStorageStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    UPLOADING = "UPLOADING"
+    PROCESSING = "PROCESSING"
+    VERIFYING = "VERIFYING"
+    READY = "READY"
+    RETRYING = "RETRYING"
+    FAILED = "FAILED"
+    DISABLED = "DISABLED"
+
+
+# ==========================================
 # MEDIA ASSETS
 # ==========================================
 
@@ -221,13 +233,17 @@ class Video(Base):
     youtube_url = Column(String(512), nullable=True)
     youtube_privacy = Column(String(32), default="unlisted")
     title = Column(String(255), nullable=True)
+    filename = Column(String(255), nullable=True)
+    sha256 = Column(String(64), nullable=True, index=True)
     description = Column(Text, nullable=True)
     duration = Column(Float, default=0.0)
     resolution = Column(String(32), nullable=True) # 1080p, 720p, etc.
     file_size = Column(BigInteger, default=0)
+    telegram_message_id = Column(Integer, nullable=True)
+    telegram_chat_id = Column(BigInteger, nullable=True)
     is_split = Column(Boolean, default=False)
     watermarked = Column(Boolean, default=True)
-    storage_type = Column(String(32), default="YOUTUBE")
+    storage_type = Column(String(32), default="MULTI_STORAGE")
     status = Column(String(32), default="READY")
     upload_completed_at = Column(DateTime, nullable=True)
     metadata_json = Column(JSON, default=dict)
@@ -237,7 +253,40 @@ class Video(Base):
     lecture = relationship("Lecture", back_populates="video")
     parts = relationship("VideoPart", back_populates="video", cascade="all, delete-orphan")
     account = relationship("YouTubeAccount", backref="videos")
+    storages = relationship("VideoStorage", back_populates="video", cascade="all, delete-orphan")
 
+
+class VideoStorage(Base):
+    __tablename__ = "video_storages"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    video_id = Column(String(64), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(32), nullable=False, index=True) # vcdn, media_cm, anonmp4, vevocloud
+    status = Column(String(32), default="PENDING", index=True) # PENDING, UPLOADING, PROCESSING, VERIFYING, READY, RETRYING, FAILED, DISABLED
+    provider_video_id = Column(String(128), nullable=True, index=True)
+    watch_url = Column(String(512), nullable=True)
+    embed_url = Column(String(512), nullable=True)
+    hls_url = Column(String(512), nullable=True)
+    playback_url = Column(String(512), nullable=True)
+    thumbnail_url = Column(String(512), nullable=True)
+    delete_url = Column(String(512), nullable=True)
+    remote_size = Column(BigInteger, default=0)
+    remote_duration = Column(Float, default=0.0)
+    attempt_count = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    last_attempt_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("video_id", "provider", name="uq_video_provider_storage"),
+        Index("idx_video_storage_prov_status", "provider", "status"),
+    )
+
+    video = relationship("Video", back_populates="storages")
 
 
 class VideoPart(Base):

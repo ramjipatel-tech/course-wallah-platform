@@ -1076,7 +1076,8 @@ class YouTubeAccountManager:
         duration: float = 0.0,
         resolution: str = "1080p",
         file_size: int = 0,
-        reason: str = "uploadLimitExceeded"
+        reason: str = "uploadLimitExceeded",
+        **kwargs
     ) -> Path:
         """
         Saves watermarked artifact and metadata checkpoint for seamless resumption.
@@ -1098,15 +1099,18 @@ class YouTubeAccountManager:
         data = {
             "batch_id": str(batch_id),
             "lecture_index": lecture_index,
+            "title": kwargs.get("title", f"Lecture #{lecture_index}"),
+            "status": kwargs.get("status", "WAITING_FOR_YOUTUBE_ACCOUNT"),
             "prepared_video_path": str(target_video),
             "thumbnail_path": target_thumb,
             "duration": duration,
             "resolution": resolution,
             "file_size": file_size or (target_video.stat().st_size if target_video.exists() else 0),
             "reason": reason,
-            "stage": "WATERMARKED_READY_FOR_UPLOAD",
+            "stage": kwargs.get("stage", "WATERMARKED_READY_FOR_UPLOAD"),
             "created_at": datetime.utcnow().isoformat()
         }
+        data.update(kwargs)
         ckpt_file = ckpt_dir / "checkpoint.json"
         ckpt_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return ckpt_file
