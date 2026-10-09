@@ -94,7 +94,8 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
 
         logger.info(f"[STORAGE] [VCDN] Initiating upload for '{title}' ({file_size} bytes)...")
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        timeout_cfg = httpx.Timeout(connect=60.0, read=300.0, write=300.0, pool=60.0)
+        async with httpx.AsyncClient(timeout=timeout_cfg) as client:
             # Step 1: POST /api/v1/upload/init
             init_url = f"{self.base_url}/api/v1/upload/init"
             init_payload = {
