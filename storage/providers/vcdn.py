@@ -296,6 +296,13 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
                     }
                     mapped_status = status_map.get(raw_status, StorageProviderStatus.PROCESSING.value)
 
+                    playback_sources = data.get("playback_sources") or []
+                    master_url = None
+                    if isinstance(playback_sources, list) and len(playback_sources) > 0 and isinstance(playback_sources[0], dict):
+                        master_url = playback_sources[0].get("masterUrl")
+                    if not master_url:
+                        master_url = data.get("legacy_playback_url")
+
                     return StorageProviderResult(
                         success=(mapped_status == StorageProviderStatus.READY.value),
                         status=mapped_status,
@@ -303,6 +310,8 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
                         provider_video_id=provider_video_id,
                         embed_url=embed_url,
                         watch_url=embed_url,
+                        hls_url=master_url,
+                        playback_url=master_url or embed_url,
                         raw_metadata=data,
                     )
                 else:
@@ -341,7 +350,7 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
             status_res = await self.get_status(provider_video_id)
             if status_res.status == StorageProviderStatus.READY.value:
                 # Video is ready in VCDN! Now mint playback token to get streamUrl if available
-                stream_url = None
+                stream_url = status_res.hls_url
                 try:
                     async with httpx.AsyncClient(timeout=20.0) as client:
                         tok_url = f"{self.base_url}/api/v1/videos/{provider_video_id}/playback-token"
@@ -352,7 +361,9 @@ class VcdnStorageProvider(BaseVideoStorageProvider):
                         )
                         if tok_res.status_code == 200:
                             tok_data = tok_res.json()
-                            stream_url = tok_data.get("streamUrl")
+                            token_stream = tok_data.get("streamUrl")
+                            if token_stream:
+                                stream_url = token_stream
                 except Exception as tok_err:
                     logger.debug(f"[STORAGE] [VCDN] Playback token notice: {tok_err}")
 

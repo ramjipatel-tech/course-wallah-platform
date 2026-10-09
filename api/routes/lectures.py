@@ -109,7 +109,9 @@ async def get_lecture_playback_access(lecture_id: str, db: AsyncSession = Depend
     storage_provider = None
 
     if video and video.storages:
-        for st in video.storages:
+        provider_order = {"vcdn": 1, "vevocloud": 2, "anonmp4": 3, "media_cm": 4}
+        sorted_storages = sorted(video.storages, key=lambda s: provider_order.get(s.provider, 99))
+        for st in sorted_storages:
             if st.status in ("READY", VideoStorageStatus.READY.value):
                 if st.provider == "media_cm":
                     filecode = st.provider_video_id or (st.embed_url.rstrip("/").split("/")[-1] if st.embed_url else "")
