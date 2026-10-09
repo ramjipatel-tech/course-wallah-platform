@@ -55,13 +55,16 @@ B2_BUCKET = (os.environ.get("B2_BUCKET") or os.environ.get("B2_BUCKET_NAME", "co
 B2_KEY_ID = os.environ.get("B2_KEY_ID", "").strip()
 B2_APPLICATION_KEY = os.environ.get("B2_APPLICATION_KEY", "").strip()
 
-# YouTube Data API Settings
+# YouTube Data API Settings (Default Disabled: Video hosting uses Multi-Storage VCDN/Media.cm)
+YOUTUBE_ENABLED = os.environ.get("YOUTUBE_ENABLED", "false").lower() == "true"
 YOUTUBE_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID", "").strip()
 YOUTUBE_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "").strip()
 YOUTUBE_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN", "").strip()
 YOUTUBE_DEFAULT_PRIVACY = os.environ.get("YOUTUBE_DEFAULT_PRIVACY", "unlisted").strip()
 
-# Watermark Defaults
+# Watermark & Encoding Performance Settings
+WATERMARK_ENABLED = os.environ.get("WATERMARK_ENABLED", "true").lower() == "true"
+WATERMARK_PRESET = os.environ.get("WATERMARK_PRESET", "ultrafast").strip()
 WATERMARK_TEXT = os.environ.get("WATERMARK_TEXT", "COURSE WALLAH").strip()
 WATERMARK_OPACITY = float(os.environ.get("WATERMARK_OPACITY", "0.45"))
 WATERMARK_CRF = int(os.environ.get("WATERMARK_CRF", "26"))

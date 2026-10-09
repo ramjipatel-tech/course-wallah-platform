@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 
-from config.settings import WATERMARK_TEXT, WATERMARK_OPACITY, WATERMARK_CRF, TEMP_DIR, DATA_DIR
+from config.settings import WATERMARK_TEXT, WATERMARK_OPACITY, WATERMARK_CRF, WATERMARK_PRESET, TEMP_DIR, DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class WatermarkEngine:
         job_context: Optional[Any] = None
     ) -> str:
         """
-        Applies animated dynamic watermark to video using optimized FFmpeg encoding.
+        Applies animated dynamic watermark to video using optimized multi-core FFmpeg encoding.
         """
         in_path = Path(input_video)
         out_path = Path(output_video)
@@ -113,12 +113,15 @@ class WatermarkEngine:
             animation_mode=animation_mode
         )
 
+        preset = WATERMARK_PRESET or "ultrafast"
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
+            "-threads", "0",
             "-i", str(in_path),
             "-vf", vf,
             "-c:v", "libx264",
-            "-preset", "veryfast",
+            "-preset", preset,
+            "-tune", "fastdecode",
             "-crf", str(crf),
             "-c:a", "copy",
             "-movflags", "+faststart",

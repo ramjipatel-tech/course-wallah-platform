@@ -14,7 +14,9 @@ from config.settings import (
     MAX_RETRIES,
     RETRY_DELAY,
     B2_BUCKET,
-    MAX_CONCURRENT_JOBS
+    MAX_CONCURRENT_JOBS,
+    YOUTUBE_ENABLED,
+    WATERMARK_ENABLED
 )
 from db.connection import get_db_session
 from db.repository import ContentRepository, slugify
@@ -583,20 +585,25 @@ class ContentProcessingEngine:
                     # ==========================================
                     # PHASE 2: ANIMATED MOVING WATERMARK
                     # ==========================================
-                    phase_states["watermark"] = "🔄"
-                    await _update_telegram_ui("Applying animated moving watermark...", wm_pct=35.0)
-                    logger.info(f"[WATERMARK_STARTED] lecture_index=#{item.index} mode=continuous_drift")
+                    if WATERMARK_ENABLED:
+                        phase_states["watermark"] = "🔄"
+                        await _update_telegram_ui("Applying high-speed moving watermark...", wm_pct=35.0)
+                        logger.info(f"[WATERMARK_STARTED] lecture_index=#{item.index} mode=continuous_drift")
 
-                    watermarked_video_path = str(work_dir / f"wm_{Path(primary_video).name}")
-                    await WatermarkEngine.apply_watermark(
-                        input_video=primary_video,
-                        output_video=watermarked_video_path,
-                        watermark_text=watermark_text,
-                        animation_mode="continuous_drift"
-                    )
-                    phase_states["watermark"] = "✅"
-                    await _update_telegram_ui("Watermark Applied", wm_pct=100.0)
-                    logger.info(f"[WATERMARK_COMPLETED] lecture_index=#{item.index} output={watermarked_video_path}")
+                        watermarked_video_path = str(work_dir / f"wm_{Path(primary_video).name}")
+                        await WatermarkEngine.apply_watermark(
+                            input_video=primary_video,
+                            output_video=watermarked_video_path,
+                            watermark_text=watermark_text,
+                            animation_mode="continuous_drift"
+                        )
+                        phase_states["watermark"] = "✅"
+                        await _update_telegram_ui("Watermark Applied", wm_pct=100.0)
+                        logger.info(f"[WATERMARK_COMPLETED] lecture_index=#{item.index} output={watermarked_video_path}")
+                    else:
+                        watermarked_video_path = primary_video
+                        phase_states["watermark"] = "⏭️"
+                        logger.info(f"[WATERMARK_BYPASSED] Watermark is disabled (WATERMARK_ENABLED=false). Skipping re-encoding.")
 
                     # ==========================================
                     # PHASE 3: THUMBNAIL EXTRACTION
@@ -618,9 +625,15 @@ class ContentProcessingEngine:
                         await controller.wait_if_paused()
 
             # ==========================================
-            # PHASE 4: YOUTUBE RESUMABLE UPLOAD (MULTI-ACCOUNT FAILOVER)
+            # PHASE 4: YOUTUBE RESUMABLE UPLOAD (OPTIONAL)
             # ==========================================
-            if watermarked_video_path and os.path.exists(watermarked_video_path):
+            youtube_video_id = None
+            youtube_channel_id = None
+            youtube_account_id = None
+            youtube_url = None
+            upload_completed_at = None
+
+            if YOUTUBE_ENABLED and watermarked_video_path and os.path.exists(watermarked_video_path):
                 phase_states["youtube"] = "🔄"
                 await _update_telegram_ui("Uploading to YouTube (Multi-Account Manager)...", yt_pct=15.0)
                 logger.info(f"[YOUTUBE_UPLOAD_STARTED] lecture_index=#{item.index} title='{item.title}'")
@@ -681,6 +694,9 @@ class ContentProcessingEngine:
                         )
                     except Exception as yt_check_err:
                         logger.debug(f"[YOUTUBE_STATUS_CHECK_NOTICE] {yt_check_err}")
+            else:
+                phase_states["youtube"] = "⏭️"
+                logger.info(f"[YOUTUBE_SKIPPED] YouTube upload disabled (YOUTUBE_ENABLED=false). Proceeding directly to Multi-Storage replication.")
 
                 # ==========================================
                 # PHASE 4.5: MULTI-STORAGE VIDEO REPLICATION
