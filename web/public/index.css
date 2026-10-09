@@ -3793,6 +3793,167 @@ body.theme-light .guidance-hint-item {
   transform-origin: center center !important;
 }
 
+/* Cinema Mode Stream Card (Zero-buffering Media.cm & Cloud Hub) */
+.cinema-stream-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #080B14;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cinema-stream-backdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(20px) brightness(0.28);
+  transform: scale(1.1);
+  transition: transform 0.4s ease, filter 0.4s ease;
+}
+
+.cinema-stream-card:hover .cinema-stream-backdrop {
+  transform: scale(1.15);
+  filter: blur(16px) brightness(0.35);
+}
+
+.cinema-stream-overlay {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.cinema-stream-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.cinema-badge-secure {
+  background: rgba(99, 102, 241, 0.22);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  color: #A5B4FC;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+}
+
+.cinema-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22C55E;
+  box-shadow: 0 0 10px #22C55E;
+  display: inline-block;
+}
+
+.cinema-badge-res {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+}
+
+.cinema-play-center {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.cinema-play-btn-glow {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 35px rgba(99, 102, 241, 0.7), 0 0 70px rgba(139, 92, 246, 0.4);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+  margin-bottom: 18px;
+}
+
+.cinema-stream-card:hover .cinema-play-btn-glow {
+  transform: scale(1.12);
+  box-shadow: 0 0 50px rgba(99, 102, 241, 0.95), 0 0 90px rgba(139, 92, 246, 0.65);
+}
+
+.cinema-play-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+.cinema-play-sub {
+  font-size: 13px;
+  color: #CBD5E1;
+  margin: 0;
+  max-width: 520px;
+  line-height: 1.5;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+}
+
+.cinema-stream-bottom {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.btn-cinema-launch {
+  background: linear-gradient(135deg, #4F46E5, #7C3AED);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.45);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-cinema-launch:hover {
+  background: linear-gradient(135deg, #4338CA, #6D28D9);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(79, 70, 229, 0.65);
+}
+
 /* Full-Width Continuous Sleek Header Bar across top of video (100% covers YouTube title, channel, share) */
 .player-top-header-bar {
   position: absolute;

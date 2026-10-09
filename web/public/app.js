@@ -923,9 +923,12 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
 
   // Filter sibling playlist to ONLY videos so PDFs don't get mixed in playlist!
   const videoPlaylist = (lecture.playlist || []).filter(item => item.has_video);
-  const isEmbed = Boolean(access.embed_url);
-  const isDirectHls = Boolean(!isEmbed && access.stream_url);
-  const hasYouTube = Boolean(!isEmbed && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const isMediaCm = Boolean((access.storage_provider === 'media_cm') || (access.embed_url && access.embed_url.includes('media.cm')) || (access.stream_url && access.stream_url.includes('media.cm')));
+  const isVcdn = Boolean((access.storage_provider === 'vcdn') || (access.embed_url && access.embed_url.includes('vcdn.me')));
+  const isEmbed = Boolean(access.embed_url && !isMediaCm);
+  const isDirectHls = Boolean(!isEmbed && !isMediaCm && access.stream_url && !access.stream_url.includes('media.cm'));
+  const hasYouTube = Boolean(!isEmbed && !isMediaCm && !isDirectHls && access.youtube_video_id && !access.youtube_video_id.startsWith('cw_temp_') && !access.youtube_video_id.startsWith('yt_id_') && !access.youtube_video_id.startsWith('EXISTING_YT') && access.youtube_video_id !== 'dQw4w9WgXcQ');
+  const detectedQuality = (access.player_config && access.player_config.quality) ? access.player_config.quality : '480p';
 
   container.innerHTML = `
     <!-- Top Back Navigation -->
@@ -967,7 +970,30 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
       <!-- Sleek Tablet Frame (Exact AS Multiverse Match) -->
       <div class="as-video-tablet-frame">
         <div class="as-video-inner-wrap" id="player-container">
-          ${isEmbed ? `
+          ${isMediaCm ? `
+            <div class="cinema-stream-card" onclick="openCinemaPlayer('${access.embed_url || access.stream_url}')" title="Click to launch Course Wallah Cinema Player">
+              <div class="cinema-stream-backdrop" style="background-image: url('${lecture.thumbnail_url || '/static/logo.png'}')"></div>
+              <div class="cinema-stream-overlay">
+                <div class="cinema-stream-top">
+                  <span class="cinema-badge-secure"><span class="cinema-pulse-dot"></span> MEDIA.CM ULTRA STREAM</span>
+                  <span class="cinema-badge-res">${detectedQuality.toUpperCase()} • HIGH SPEED</span>
+                </div>
+                <div class="cinema-play-center">
+                  <div class="cinema-play-btn-glow">
+                    <svg viewBox="0 0 24 24" width="38" height="38" fill="#ffffff"><polygon points="7 4 20 12 7 20 7 4"/></svg>
+                  </div>
+                  <h3 class="cinema-play-title">CLICK TO PLAY FULL LECTURE</h3>
+                  <p class="cinema-play-sub">Official Course Wallah High-Speed CDN &bull; Watermarked &bull; 0.5x-2.0x Speed &bull; Zero Buffering</p>
+                </div>
+                <div class="cinema-stream-bottom">
+                  <button class="btn-cinema-launch" onclick="event.stopPropagation(); openCinemaPlayer('${access.embed_url || access.stream_url}')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>▶ Open Cinema Player Window</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ` : (isEmbed ? `
             <iframe
               src="${access.embed_url}"
               class="vcdn-iframe-player"
@@ -995,10 +1021,10 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
               <span style="font-weight:600; font-size:16px; color:#F8FAFC;">${escapeHtml(access.message || access.error || 'Video Stream Unavailable')}</span>
               <span style="font-size:13px; color:#94A3B8; margin-top:6px;">This lecture does not have an active video stream or is being processed.</span>
             </div>
-          `))}
+          `)))}
 
           <!-- Seamless Top Overlay Bar (For YouTube embed to mask branding) -->
-          ${hasYouTube && !isDirectHls && !isEmbed ? `
+          ${hasYouTube && !isDirectHls && !isEmbed && !isMediaCm ? `
             <div class="player-top-header-bar" onclick="togglePlayerPlayback()">
               <div class="player-top-brand">
                 <img src="/static/logo.png" alt="Course Wallah" class="player-top-logo">
@@ -1024,10 +1050,10 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
       <div class="player-quick-bar">
         <div class="player-quick-group">
           <span class="player-quick-label">⚡ Stream Quality:</span>
-          <button class="player-quality-pill active" onclick="setPlayerQuality('1080p')">1080p Full HD</button>
-          <button class="player-quality-pill" onclick="setPlayerQuality('720p')">720p HD</button>
-          <button class="player-quality-pill" onclick="setPlayerQuality('480p')">480p SD</button>
-          <button class="player-quality-pill" onclick="setPlayerQuality('360p')">360p Fast</button>
+          <button class="player-quality-pill ${detectedQuality === '1080p' ? 'active' : ''}" onclick="setPlayerQuality('1080p')">1080p Full HD</button>
+          <button class="player-quality-pill ${detectedQuality === '720p' ? 'active' : ''}" onclick="setPlayerQuality('720p')">720p HD</button>
+          <button class="player-quality-pill ${detectedQuality === '480p' ? 'active' : ''}" onclick="setPlayerQuality('480p')">480p SD</button>
+          <button class="player-quality-pill ${detectedQuality === '360p' ? 'active' : ''}" onclick="setPlayerQuality('360p')">360p Fast</button>
         </div>
         <div class="player-quick-group">
           <span class="player-quick-label">⏱️ Speed:</span>
@@ -1112,6 +1138,18 @@ async function renderPlayerView(container, appSlugOrId, batchIdOrSlug, subjectId
       initPlyr(access.stream_url);
     }
   }, 100);
+}
+
+function openCinemaPlayer(url) {
+  if (!url) {
+    showToast('⚠️ Video link unavailable');
+    return;
+  }
+  showToast('🚀 Launching Course Wallah Cinema Player...');
+  const win = window.open(url, '_blank');
+  if (!win || win.closed || typeof win.closed === 'undefined') {
+    window.location.href = url;
+  }
 }
 
 let currentHlsInstance = null;
