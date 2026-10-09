@@ -740,25 +740,27 @@ class ContentProcessingEngine:
                 # ==========================================
                 storage_replication_success = True
                 video_db_id = None
-                async with get_db_session() as v_sess:
-                    v_repo = ContentRepository(v_sess)
-                    lec_rec = await v_repo.get_lecture_by_index(batch_id, item.index)
-                    if lec_rec:
-                        vid_rec = await v_repo.attach_video_to_lecture(
-                            lecture_id=lec_rec.id,
-                            youtube_video_id=youtube_video_id or f"cw_temp_{item.index}",
-                            duration=video_duration,
-                            resolution=video_resolution,
-                            file_size=video_size,
-                            title=item.title,
-                            youtube_channel_id=youtube_channel_id,
-                            youtube_account_id=youtube_account_id,
-                            youtube_url=youtube_url,
-                            upload_completed_at=upload_completed_at or datetime.utcnow(),
-                        )
-                        video_db_id = vid_rec.id
 
-                if video_db_id:
+                if watermarked_video_path and os.path.exists(watermarked_video_path):
+                    async with get_db_session() as v_sess:
+                        v_repo = ContentRepository(v_sess)
+                        lec_rec = await v_repo.get_lecture_by_index(batch_id, item.index)
+                        if lec_rec:
+                            vid_rec = await v_repo.attach_video_to_lecture(
+                                lecture_id=lec_rec.id,
+                                youtube_video_id=youtube_video_id or f"cw_temp_{item.index}",
+                                duration=video_duration,
+                                resolution=video_resolution,
+                                file_size=video_size,
+                                title=item.title,
+                                youtube_channel_id=youtube_channel_id,
+                                youtube_account_id=youtube_account_id,
+                                youtube_url=youtube_url,
+                                upload_completed_at=upload_completed_at or datetime.utcnow(),
+                            )
+                            video_db_id = vid_rec.id
+
+                if video_db_id and watermarked_video_path and os.path.exists(watermarked_video_path):
                     logger.info(f"[STORAGE_REPLICATION_START] lecture_index=#{item.index} video_id={video_db_id}")
 
                     async def _storage_ui_callback(payload: Dict[str, Any]):
