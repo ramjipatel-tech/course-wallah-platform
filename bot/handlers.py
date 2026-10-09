@@ -1952,13 +1952,22 @@ def register_handlers(app: Client):
     # ==========================================
     # 7. FORWARDED CHANNEL MESSAGE HANDLER (1-CLICK STORAGE CHANNEL SETUP)
     # ==========================================
-    @app.on_message(filters.forwarded & filters.private)
+    @app.on_message(filters.forwarded & filters.private & ~filters.document & ~filters.video & ~filters.audio & ~filters.photo)
     async def handle_forwarded_message(client: Client, message: Message):
         user_id = message.from_user.id if message.from_user else 0
         if not is_admin(user_id):
             return
 
-        fwd_chat = message.forward_from_chat
+        fwd_chat = None
+        if hasattr(message, "forward_origin") and message.forward_origin:
+            orig = message.forward_origin
+            if hasattr(orig, "chat") and orig.chat:
+                fwd_chat = orig.chat
+            elif hasattr(orig, "sender_chat") and orig.sender_chat:
+                fwd_chat = orig.sender_chat
+        if not fwd_chat and hasattr(message, "forward_from_chat") and message.forward_from_chat:
+            fwd_chat = message.forward_from_chat
+
         if fwd_chat and fwd_chat.type in ("channel", "supergroup", "group"):
             chan_id = fwd_chat.id
             chan_title = fwd_chat.title or "Private Storage Channel"
