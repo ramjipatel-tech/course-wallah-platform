@@ -1,0 +1,201 @@
+================================================================================
+COURSE WALLAH PLATFORM — COMPLETE MASTER PROMPT & ARCHITECTURAL SPECIFICATION
+================================================================================
+Generated for: Course Wallah & Nexora Ecosystem
+Target Repo: ramjipatel-tech/course-wallah-platform
+Deployment: Railway / Docker / Local Dual-Engine (FastAPI + Node.js/Pyrogram)
+Current Version: 2.4.0 (Zero-Cost Telegram Direct Stream Engine + AS Multiverse SPA)
+================================================================================
+
+[COPY-PASTE PROMPT FOR FUTURE AI ASSISTANTS / DEVELOPERS]
+--------------------------------------------------------------------------------
+You are an expert full-stack developer and cloud media streaming engineer working on the "Course Wallah Platform" (repository: ramjipatel-tech/course-wallah-platform).
+
+Course Wallah is an end-to-end educational batch archiver, high-performance video streaming platform, and Telegram bot ecosystem designed to ingest, process, watermark, replicate, and stream video lectures with zero recurring hosting costs.
+
+Below is the complete context, architectural blueprint, database schema, code structure, streaming mechanisms, and operating rules for this project. Use this document whenever resuming development, adding new features, debugging, or deploying updates.
+--------------------------------------------------------------------------------
+
+
+1. CORE ARCHITECTURE & SYSTEM OVERVIEW
+================================================================================
+The platform operates as a unified dual-engine application:
+
+A. BACKEND API (FastAPI + Async SQLAlchemy):
+   - Location: `api/`
+   - Entry point: `api/server.py`
+   - Framework: FastAPI with Uvicorn / Gunicorn
+   - Database: SQLite / PostgreSQL via Async SQLAlchemy ORM (`db/`)
+   - Core API Routes:
+     * `/api/v1/apps` & `/api/apps`: Lists educational app hubs (Physics Wallah, Apna College, KGS, Technical Classes, etc.)
+     * `/api/v1/batches` & `/api/batches`: Lists batches, subject hierarchies, and folders.
+     * `/api/v1/lectures/{id}`: Lecture metadata and sibling video playlists.
+     * `/api/v1/lectures/{id}/access`: Secure video playback resolver (returns direct stream URL without exposing bot credentials).
+     * `/api/v1/stream/tg/{message_id}`: High-performance Telegram MTProto video proxy streaming direct MP4 chunks with HTTP 206 Byte-Range support.
+     * `/api/v1/pdfs/{id}/content`: Secure PDF proxy streaming from Backblaze B2 or storage.
+
+B. TELEGRAM BOT ENGINE (Pyrogram / Hydrogram MTProto):
+   - Location: `bot/`
+   - Entry point: `bot/bot_app.py`, handlers in `bot/handlers.py`
+   - Features:
+     * Batch Wizard: Ingests `.txt` indexer files containing hundreds of lecture URLs, parses trees into App -> Batch -> Subject -> Folder -> Lecture.
+     * Video Stream Generator: Direct video forward/upload handler and `/stream <url>` command.
+     * Interactive `/setchannel`: 1-click storage channel linking with automated permissions test and channel verification.
+     * Real-time UI Cards: Live progress bar, download speed, watermark transcoding status, and storage replication updates.
+
+C. FRONTEND CLIENT (AS Multiverse Single Page Application):
+   - Location: `web/public/`
+   - HTML: `web/public/index.html`
+   - Styling: Vanilla CSS `web/public/index.css` (AS Multiverse Glassmorphic Dark & Light Theme)
+   - JavaScript Engine: `web/public/app.js` (SPA Router, Plyr HTML5 Player, Quality Picker, Speed Controller, Study Streak Tracker)
+   - Security: `web/public/security_guard.js` (Anti-screenshot DRM curtain, devtools protection, dynamic session watermark canvas)
+
+D. MEDIA & STORAGE ENGINE:
+   - Video Download: `downloader/downloader.py` (yt-dlp, direct HTTP stream fetcher with Referer/Origin headers)
+   - Video Transcoding: `watermark/processor.py` (FFmpeg moving watermark, ultrafast preset, CRF 26)
+   - Multi-Storage Replicator: `storage/manager.py` & `storage/providers/`
+     * 1. Telegram Stream (Primary): `storage/providers/telegram_stream.py` (Unlimited Zero-Cost In-App Streaming)
+     * 2. VCDN: `storage/providers/vcdn.py` (HLS H.264/AAC Adaptive Bitrate)
+     * 3. Media.cm: `storage/providers/media_cm.py` (Free cloud streaming failover)
+     * 4. AnonMP4: `storage/providers/anonmp4.py` (Direct MP4 hosting)
+     * 5. Vevocloud: `storage/providers/vevocloud.py` (Ultra HD playback)
+
+
+2. ZERO-COST TELEGRAM DIRECT STREAMING ENGINE
+================================================================================
+How Telegram video is converted into a high-speed HTTP streaming server:
+
+A. MTPROTO CLIENT POOL (`storage/telegram_stream/client_pool.py`):
+   - Manages a pool of Pyrogram clients (Primary Bot Token + Optional Worker Bot Tokens in `TELEGRAM_WORKER_TOKENS`).
+   - Round-robin load balancing across worker bots for high-concurrency requests.
+
+B. 2MB RAM LRU HEADER CACHE (`GLOBAL_HEADER_CACHE`):
+   - Caches initial 2MB video headers (moov/ftyp atom boxes) in RAM during upload or first stream request.
+   - Enables instant (1ms) video player startup and time seeking in Plyr / Chrome / Safari / iOS without waiting for Telegram download.
+
+C. HTTP RFC 7233 206 PARTIAL CONTENT RANGE PROXY (`api/routes/stream.py`):
+   - Handles `Range: bytes=start-end` requests from browser HTML5 `<video>` tags.
+   - Streams 1MB to 4MB chunks on demand via `client.stream_media()` with offset calculation.
+   - Handles client disconnects (`asyncio.CancelledError`, `GeneratorExit`, `BrokenPipeError`) gracefully.
+
+
+3. SIGNATURE TELEGRAM CHANNEL POST CAPTION FORMATTER
+================================================================================
+File: `storage/telegram_stream/caption_formatter.py`
+
+Every video uploaded to the Telegram Storage Channel is formatted with Course Wallah's signature blockquote template:
+
+```html
+<blockquote>——— ✦ 009 ✦——— ❞</blockquote>
+
+<blockquote>📚 Rakesh Sir & Team. ❞</blockquote>
+<blockquote>📖 SSC Pratham Batch-02 ❞</blockquote>
+<blockquote>📌 Unit 4 — English — Vocab (Live ❞</blockquote>
+
+<blockquote>📝 Topic : Vocab (Live ❞</blockquote>
+
+<blockquote>🎬 Title : ) Class-128 | Preposition Practice ❞</blockquote>
+
+<blockquote>├── Extention : ∮◯⚡ Course Wallah 🎓 🔥.mp4 ❞
+├── Resolution : 720p (1280 × 720)</blockquote>
+
+<blockquote>📚 Subject » Rakesh Sir & Team. ❞</blockquote>
+<blockquote>📚 Course » SSC Pratham Batch-02 ❞</blockquote>
+
+<blockquote>🌟 Extracted By : ∮◯⚡ 🅲🅾🆄🆁🆂🅴 🆆🅰🅻🅻🅰🅷 💻 ❞
+∮◯🎓🔥</blockquote>
+```
+
+Formatting Rules:
+- Dynamic 3-digit zero-padded index (`009`, `010`).
+- HTML entity escaping (`&lt;`, `&gt;`, `&amp;`) for user inputs.
+- Safe truncation to guarantee total length <= 1020 characters (fitting Telegram's 1024 character limit).
+- Uploads use `parse_mode=ParseMode.HTML` in Pyrogram.
+
+
+4. DATABASE SCHEMA & MODELS (`db/models.py`)
+================================================================================
+- `App`: id, name, slug, description, icon_url, created_at, updated_at
+- `Batch`: id, app_id, name, slug, category, branch, semester, thumbnail_url, quality_pref
+- `Subject`: id, batch_id, name, slug, code, icon_url
+- `Folder`: id, subject_id, name, slug, unit_number, parent_id
+- `Lecture`: id, folder_id, subject_id, batch_id, lecture_index, title, slug, source_url, source_pdf_url, provider, has_video, has_pdf, publication_status, thumbnail_url
+- `Video`: id, lecture_id, youtube_video_id, duration, resolution, file_size, title, filename, sha256, upload_completed_at
+- `VideoStorage`: id, video_id, provider ("telegram" / "vcdn" / "media_cm"), status ("READY" / "PROCESSING" / "FAILED"), provider_video_id, watch_url, embed_url, hls_url, playback_url, remote_size, remote_duration, attempt_count
+- `Pdf`: id, lecture_id, b2_key, b2_url, file_size, page_count, title
+- `TelegramUser`: user_id, username, first_name, role, is_active, created_at
+
+
+5. ENVIRONMENT VARIABLES CONFIGURATION (`.env`)
+================================================================================
+```env
+# Core Telegram Bot Credentials
+API_ID=28784360
+API_HASH=7d6fbc3a19b8898ef5cce0220d9e51c8
+BOT_TOKEN=8001648937:AAH0p0_n3fM6Ue6Y5n7o8w7x5q1Z4r9y2X0
+OWNER_ID=7910903328
+TELEGRAM_STORAGE_CHANNEL_ID=-1002345678901
+TELEGRAM_WORKER_TOKENS=
+
+# Storage & Streaming
+TELEGRAM_STREAM_ENABLED=true
+STORAGE_REQUIRED_PROVIDERS=telegram
+VCDN_ENABLED=false
+MEDIA_CM_ENABLED=false
+YOUTUBE_ENABLED=false
+
+# Backblaze B2 (PDFs)
+B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+B2_REGION=us-east-005
+B2_BUCKET=course-wallah-pdfs
+B2_KEY_ID=
+B2_APPLICATION_KEY=
+
+# Processing & Limits
+MAX_CONCURRENT_JOBS=3
+MAX_RETRIES=3
+RETRY_DELAY=5
+WATERMARK_ENABLED=true
+WATERMARK_TEXT=COURSE WALLAH
+WATERMARK_PRESET=ultrafast
+WATERMARK_OPACITY=0.45
+WATERMARK_CRF=26
+
+# Server & Database
+DATABASE_URL=sqlite+aiosqlite:///./data/course_wallah.db
+SITE_URL=https://course-wallah-platform-production-d797.up.railway.app
+API_URL=https://course-wallah-platform-production-d797.up.railway.app
+SECURITY_TEST_MODE=true
+```
+
+
+6. DEPLOYMENT & EXECUTION COMMANDS
+================================================================================
+A. Run Locally:
+   - Python Backend & Bot: `py -3.12 start.py`
+   - Web Frontend: `npm run dev` (running on localhost:3000)
+
+B. Run Pytest Suite:
+   - `py -3.12 -m pytest tests/ -v` (38 passing unit and integration tests)
+
+C. Railway Production Deployment:
+   - Start Command: `python start.py` (Procfile / Dockerfile / nixpacks)
+   - Web Server + Background Bot + Stream Engine start concurrently via asyncio.
+
+
+7. CRITICAL CODE GOTCHAS & RULES
+================================================================================
+1. NEVER fallback to YouTube if Telegram stream is active:
+   - When `VideoStorage` has provider `telegram` or `telegram_stream` with status `READY`, `get_lecture_playback_access` returns `youtube_video_id: null` and `stream_url: "/api/v1/stream/tg/<msg_id>"`.
+   - `tg_` prefix on video IDs (e.g. `tg_956`) is NOT a YouTube ID.
+
+2. Pure In-App Player UX:
+   - Video player in `web/public/app.js` is clean HTML5 Plyr without any bottom-right floating logos or artificial overlay banners.
+   - Stream quality and speed buttons work seamlessly with the native `<video>` element.
+
+3. Bot Document Handlers:
+   - When listening for forwarded channel posts for `/setchannel`, exclude document/video/audio filters (`~filters.document & ~filters.video & ~filters.audio`) so `.txt` batch uploads are never hijacked.
+
+================================================================================
+END OF MASTER SPECIFICATION — KEEP THIS FILE AT ROOT (`project.txt`)
+================================================================================
