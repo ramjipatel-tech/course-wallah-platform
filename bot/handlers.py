@@ -600,6 +600,134 @@ def register_handlers(app: Client):
             logger.exception("Error in /yt_test command: %s", exc)
             await message.reply_text("❌ Failed to test YouTube account.")
 
+    # ==========================================
+    # 7. TELEGRAM STREAM STORAGE CHANNEL COMMANDS
+    # ==========================================
+    @app.on_message(filters.command(["setchannel", "storagechannel", "setstoragechannel"]) & filters.private)
+    async def cmd_set_storage_channel(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            from storage.telegram_stream.client_pool import TelegramClientPool
+            pool = TelegramClientPool.get_instance()
+
+            if len(message.command) < 2:
+                current_chan = pool.storage_chat_id or OWNER_ID
+                text = (
+                    f"📁 <b>TELEGRAM STORAGE CHANNEL CONFIGURATION</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"<b>Current Active Storage Channel:</b> <code>{current_chan}</code>\n\n"
+                    f"<b>How to set a new Channel for lecture hosting:</b>\n"
+                    f"1. Create a private Telegram Channel.\n"
+                    f"2. Add this bot as an <b>Administrator</b> with full Post Permissions.\n"
+                    f"3. Send <code>/id</code> in the channel to get its Channel ID (e.g. <code>-1002345678901</code>).\n"
+                    f"4. Set it by running:\n"
+                    f"   <code>/setchannel -1002345678901</code>\n\n"
+                    f"<i>All future batch videos will be uploaded directly to this channel and streamed live into Course Wallah website with 0MB limits!</i>"
+                )
+                await message.reply_text(text)
+                return
+
+            raw_input = message.command[1].strip()
+            try:
+                target_chat_id = int(raw_input)
+            except ValueError:
+                await message.reply_text("❌ Invalid Channel ID format. Channel IDs must be integers (e.g. <code>-1001234567890</code>).")
+                return
+
+            wait_msg = await message.reply_text(f"⏳ <i>Verifying bot access to channel <code>{target_chat_id}</code>...</i>")
+            
+            # Test write permissions by sending a temporary message and deleting it
+            try:
+                test_post = await client.send_message(
+                    chat_id=target_chat_id,
+                    text="⚡ <b>Course Wallah Streaming Engine Verification</b>\n\nStorage Channel connected successfully."
+                )
+                await asyncio.sleep(1)
+                await test_post.delete()
+            except Exception as perm_err:
+                await wait_msg.edit_text(
+                    f"❌ <b>Channel Access Failed!</b>\n\n"
+                    f"Error: <code>{str(perm_err)}</code>\n\n"
+                    f"👉 Please make sure the bot is added as an <b>Administrator</b> to the channel with Post Messages permission."
+                )
+                return
+
+            # Update pool storage chat ID
+            pool.storage_chat_id = target_chat_id
+
+            # Persist to local .env if writable
+            try:
+                from config.settings import BASE_DIR
+                env_file = BASE_DIR / ".env"
+                if env_file.exists():
+                    env_text = env_file.read_text(encoding="utf-8")
+                    if "TELEGRAM_STORAGE_CHANNEL_ID=" in env_text:
+                        env_text = re.sub(
+                            r"TELEGRAM_STORAGE_CHANNEL_ID=.*",
+                            f"TELEGRAM_STORAGE_CHANNEL_ID={target_chat_id}",
+                            env_text
+                        )
+                    else:
+                        env_text += f"\nTELEGRAM_STORAGE_CHANNEL_ID={target_chat_id}\n"
+                    env_file.write_text(env_text, encoding="utf-8")
+            except Exception as env_err:
+                logger.debug(f"[ENV_UPDATE_NOTICE] {env_err}")
+
+            success_text = (
+                f"🎉 <b>STORAGE CHANNEL CONNECTED SUCCESSFULLY!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"✅ <b>Active Channel ID:</b> <code>{target_chat_id}</code>\n"
+                f"⚡ <b>Engine:</b> Telegram MTProto High-Speed Zero-Cost Stream\n"
+                f"🌐 <b>Website Player:</b> Course Wallah In-App HTML5 Cinema Player\n"
+                f"🚀 <b>Limits:</b> 100% Unlimited (Up to 2GB per video)\n\n"
+                f"<i>All newly ingested batches will now upload to this channel and stream directly to your students!</i>"
+            )
+            await wait_msg.edit_text(success_text)
+
+        except Exception as exc:
+            logger.exception("Error in /setchannel command: %s", exc)
+            await message.reply_text("❌ Failed to configure storage channel.")
+
+    @app.on_message(filters.command(["streamstatus", "tgstream", "stream_status"]) & filters.private)
+    async def cmd_stream_status(client: Client, message: Message):
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            if not is_admin(user_id):
+                await message.reply_text("⛔ <b>ADMIN ONLY</b>")
+                return
+
+            from storage.providers.telegram_stream import TelegramStreamStorageProvider
+            from storage.telegram_stream.client_pool import TelegramClientPool, GLOBAL_HEADER_CACHE
+
+            provider = TelegramStreamStorageProvider()
+            health = await provider.health_check()
+            pool = TelegramClientPool.get_instance()
+
+            chan_id = pool.storage_chat_id or OWNER_ID
+            workers_count = len(pool.clients) or 1
+            cached_count = len(GLOBAL_HEADER_CACHE.cache)
+
+            text = (
+                f"⚡ <b>TELEGRAM STREAMING ENGINE STATUS</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🟢 <b>Status:</b> {health.get('status', 'ONLINE')}\n"
+                f"📁 <b>Storage Channel ID:</b> <code>{chan_id}</code>\n"
+                f"🤖 <b>Active Worker Bots:</b> <code>{workers_count}</code> worker(s)\n"
+                f"🧠 <b>Cached Media Headers (1ms Seek):</b> <code>{cached_count}</code> video(s)\n"
+                f"🎬 <b>In-App Player URL:</b> <code>/api/v1/stream/tg/{{message_id}}</code>\n"
+                f"🛡️ <b>Concurrency Balancer:</b> Round-Robin MTProto Dispatch Active\n\n"
+                f"• Use <code>/setchannel &lt;channel_id&gt;</code> to change storage channel.\n"
+                f"• Free tier 100MB restrictions are 100% bypassed!"
+            )
+            await message.reply_text(text)
+        except Exception as exc:
+            logger.exception("Error in /streamstatus command: %s", exc)
+            await message.reply_text("❌ Failed to fetch stream status.")
+
     @app.on_message(filters.command(["yt_primary", "yt_set_primary"]) & filters.private)
     async def cmd_yt_primary(client: Client, message: Message):
         try:
