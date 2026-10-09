@@ -851,23 +851,46 @@ def register_handlers(app: Client):
             ]
 
             async with get_db_session() as session:
-                try:
-                    await session.execute(text("PRAGMA foreign_keys = OFF;"))
-                except Exception:
-                    pass
-
-                for t in tables:
+                bind_str = str(session.bind.url).lower() if session.bind else ""
+                if "postgres" in bind_str or "postgresql" in normalized_db_url.lower():
                     try:
-                        await session.execute(text(f"DELETE FROM {t};"))
+                        tbl_list = ", ".join(tables)
+                        await session.execute(text(f"TRUNCATE TABLE {tbl_list} CASCADE;"))
+                        await session.commit()
+                        logger.info("[WIPEDB] Postgres TRUNCATE CASCADE completed successfully.")
+                    except Exception as pg_err:
+                        logger.warning(f"[WIPEDB] Postgres truncate cascade failed: {pg_err}, falling back to single deletes...")
+                        await session.rollback()
+                        for t in tables:
+                            try:
+                                await session.execute(text(f"DELETE FROM {t};"))
+                                await session.commit()
+                            except Exception:
+                                await session.rollback()
+                else:
+                    try:
+                        await session.execute(text("PRAGMA foreign_keys = OFF;"))
                     except Exception:
                         pass
 
-                try:
-                    await session.execute(text("PRAGMA foreign_keys = ON;"))
-                except Exception:
-                    pass
+                    for t in tables:
+                        try:
+                            await session.execute(text(f"DELETE FROM {t};"))
+                        except Exception:
+                            pass
 
-                await session.commit()
+                    try:
+                        await session.execute(text("PRAGMA foreign_keys = ON;"))
+                    except Exception:
+                        pass
+
+                    await session.commit()
+
+            # Purge in-memory wizard state & caches completely
+            BatchWizardManager._wizard_sessions.clear()
+            _last_batch_sessions_by_batch.clear()
+            _last_batch_sessions_by_user.clear()
+            ContentProcessingEngine._active_batch_controllers.clear()
 
             report_text = (
                 "🗑️ <b>ONLINE DATABASE PURGED 100% CLEAN!</b>\n\n"

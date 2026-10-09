@@ -109,27 +109,50 @@ async def wipe_platform_database(
     playlists, jobs, lectures, folders, subjects, batches, apps) for a 100% fresh start.
     """
     from sqlalchemy import text
+    from bot.batch_wizard import BatchWizardManager
+    from engines.job_engine import ContentProcessingEngine
+
     tables = [
         "video_storages", "videos", "pdfs", "playlist_items", "playlists",
         "jobs", "lectures", "folders", "subjects", "batches", "apps"
     ]
-    try:
-        await db.execute(text("PRAGMA foreign_keys = OFF;"))
-    except Exception:
-        pass
-
-    for t in tables:
+    bind_str = str(db.bind.url).lower() if db.bind else ""
+    if "postgres" in bind_str:
         try:
-            await db.execute(text(f"DELETE FROM {t};"))
+            tbl_list = ", ".join(tables)
+            await db.execute(text(f"TRUNCATE TABLE {tbl_list} CASCADE;"))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            for t in tables:
+                try:
+                    await db.execute(text(f"DELETE FROM {t};"))
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+    else:
+        try:
+            await db.execute(text("PRAGMA foreign_keys = OFF;"))
         except Exception:
             pass
 
-    try:
-        await db.execute(text("PRAGMA foreign_keys = ON;"))
-    except Exception:
-        pass
+        for t in tables:
+            try:
+                await db.execute(text(f"DELETE FROM {t};"))
+            except Exception:
+                pass
 
-    await db.commit()
+        try:
+            await db.execute(text("PRAGMA foreign_keys = ON;"))
+        except Exception:
+            pass
+
+        await db.commit()
+
+    # Clear in-memory caches
+    BatchWizardManager._wizard_sessions.clear()
+    ContentProcessingEngine._active_batch_controllers.clear()
+
     return {"status": "success", "message": "Production database purged 100% clean successfully."}
 
 
