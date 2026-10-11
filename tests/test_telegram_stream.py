@@ -208,8 +208,8 @@ async def test_lecture_access_returns_telegram_stream_url():
         assert data["has_video"] is True
         assert data["storage_provider"] == "telegram"
         assert data["youtube_video_id"] is None
-        assert data["stream_url"] == f"/api/v1/stream/tg/554433?video_id={video_rec_id}"
-        assert data["playback_url"] == f"/api/v1/stream/tg/554433?video_id={video_rec_id}"
+        assert data["stream_url"].startswith(f"/api/v1/stream/tg/554433?video_id={video_rec_id}&token=")
+        assert data["playback_url"] == data["stream_url"]
         assert data["embed_url"] is None
 
 
