@@ -12,7 +12,8 @@ from typing import Optional
 
 from config.settings import SECRET_KEY
 
-PLAYBACK_TOKEN_TTL_SECONDS = 5 * 60
+# Keep long lectures working while making URLs temporary.
+PLAYBACK_TOKEN_TTL_SECONDS = 6 * 60 * 60
 
 
 def create_playback_token(video_id: str, message_id: int, ttl_seconds: int = PLAYBACK_TOKEN_TTL_SECONDS) -> str:
