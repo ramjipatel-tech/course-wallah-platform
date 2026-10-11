@@ -95,7 +95,7 @@ async def stream_telegram_video(
         )
 
     # Parse HTTP Range header (e.g. "bytes=0-1048575", "bytes=50000-")
-    range_match = re.match(r"^bytes=(\\d+)-(\\d+)?$", range.strip())
+    range_match = re.match(r"^bytes=(\d+)-(\d+)?$", range.strip())
     if not range_match:
         base_headers["Content-Range"] = f"bytes */{file_size}"
         return Response(status_code=416, headers=base_headers)
