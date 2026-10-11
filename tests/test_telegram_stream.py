@@ -94,6 +94,8 @@ async def test_fastapi_stream_endpoint_range_requests():
             # 2. Test Range request: bytes=0-1048575 (First 1MB)
             range_res = await client.get("/api/v1/stream/tg/998877", headers={"Range": "bytes=0-1048575"})
             assert range_res.status_code == 206
+            assert "filename*=UTF-8''" in range_res.headers.get("Content-Disposition")
+            assert "🔥" not in range_res.headers.get("Content-Disposition")
             assert range_res.headers.get("Content-Range") == "bytes 0-1048575/5000000"
             assert range_res.headers.get("Content-Length") == "1048576"
             assert len(range_res.content) == 1048576
