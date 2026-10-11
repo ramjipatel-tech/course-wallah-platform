@@ -83,7 +83,7 @@ async def head_telegram_video_stream(
             "Content-Length": str(file_size),
             "Content-Type": mime_type or "video/mp4",
             "Content-Disposition": _content_disposition(file_name),
-            "Cache-Control": "public, max-age=86400",
+            "Cache-Control": "private, no-store, max-age=0",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*",
         }
@@ -125,7 +125,7 @@ async def stream_telegram_video(
         "Accept-Ranges": "bytes",
         "Content-Type": mime_type or "video/mp4",
         "Content-Disposition": _content_disposition(file_name),
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "private, no-store, max-age=0",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*",
     }
