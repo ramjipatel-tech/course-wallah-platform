@@ -9,9 +9,8 @@ import {
   AIResponse
 } from "./types";
 
-// Vercel rewrites /api/* to the live FastAPI service. Set NEXT_PUBLIC_API_URL only to bypass that proxy.
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "");
-const API_BASE = configuredApiUrl ? `${configuredApiUrl}/api/v1` : "/api/v1";
+// Keep browser requests same-origin; vercel.json forwards /api/* to the live FastAPI backend.
+const API_BASE = "/api/v1";
 
 export function getStudentToken(): string | null {
   if (typeof window === "undefined") return null;
