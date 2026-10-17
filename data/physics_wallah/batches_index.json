@@ -1068,5 +1068,65 @@
     "totalSections": 4,
     "totalLectures": 14,
     "totalNotes": 3
+  },
+  {
+    "batchId": "6abb5ccf85de02c36339dc33",
+    "batchSlug": "pinnacle-5-0-2028--english--128556",
+    "batchName": "Pinnacle 5.0 2028 (English)",
+    "category": "This is the Foundation Course for 2028 UPSC Aspirants",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/33424a30-269f-4877-8402-30db0e148ec7.png",
+    "totalSections": 9,
+    "totalLectures": 11,
+    "totalNotes": 77
+  },
+  {
+    "batchId": "6abb4c8723863100b87ac69d",
+    "batchSlug": "sankalp-5-0-hindi-2028-998227",
+    "batchName": "Sankalp 5.0 Hindi 2028",
+    "category": "This is the Foundation Course for 2028 UPSC Aspirants",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/b705a149-2434-4eca-b5ed-0510570ed984.png",
+    "totalSections": 9,
+    "totalLectures": 13,
+    "totalNotes": 75
+  },
+  {
+    "batchId": "6abdfae35e397ee3dbddfd5d",
+    "batchSlug": "jeet-bihar-board-2027-class-10th-crash-course--hindi-medium--494798",
+    "batchName": "Jeet Crash Course Class 10th Bihar Board 2027 (Hindi Medium)",
+    "category": "Bihar Board",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/36d5e04f-615b-4345-9c8a-d3089d2932e6.png",
+    "totalSections": 3,
+    "totalLectures": 10,
+    "totalNotes": 10
+  },
+  {
+    "batchId": "6abdf9fdd1d2877d797254e2",
+    "batchSlug": "jeet-bihar-board-2027-class-10th-crash-course--english-medium--038190",
+    "batchName": "Jeet Crash Course Class 10th Bihar Board 2027 (English Medium)",
+    "category": "Bihar Board",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/750d7f71-7d3f-4cb8-9906-573e4a511162.png",
+    "totalSections": 3,
+    "totalLectures": 14,
+    "totalNotes": 2
+  },
+  {
+    "batchId": "6abdf90a9f90c85bc9224bbc",
+    "batchSlug": "jeet-bihar-board-class-12th-crash-course--hindi-medium--324162",
+    "batchName": "Jeet Crash Course Class 12th Bihar Board 2027 (Hindi Medium)",
+    "category": "Bihar Board",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/aab6aaeb-3d24-4c63-a1e9-9f1343fc44b1.png",
+    "totalSections": 3,
+    "totalLectures": 9,
+    "totalNotes": 2
+  },
+  {
+    "batchId": "6abdf809b5e03b2557666439",
+    "batchSlug": "jeet-bihar-board-2027-class-12th-crash-course--english-medium--632371",
+    "batchName": "Jeet Crash Course Class 12th Bihar Board 2027 (English Medium)",
+    "category": "Bihar Board",
+    "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/43cc8387-311f-4d2d-abb9-cdc3c8ceab99.png",
+    "totalSections": 3,
+    "totalLectures": 13,
+    "totalNotes": 9
   }
 ]

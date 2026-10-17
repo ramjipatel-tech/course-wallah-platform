@@ -1,0 +1,174 @@
+{
+  "platform": "Physics Wallah",
+  "batchId": "6abdf9fdd1d2877d797254e2",
+  "batchSlug": "jeet-bihar-board-2027-class-10th-crash-course--english-medium--038190",
+  "batchName": "Jeet Crash Course Class 10th Bihar Board 2027 (English Medium)",
+  "category": "Bihar Board",
+  "thumbnail": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/750d7f71-7d3f-4cb8-9906-573e4a511162.png",
+  "totalSections": 3,
+  "totalLectures": 14,
+  "totalNotes": 2,
+  "sections": [
+    {
+      "subjectName": "Notices",
+      "sectionName": "Batch Demo Videos",
+      "lectures": [
+        {
+          "id": "pw-6abdf9fd-1",
+          "title": "Demo Lecture by Sachin Sir",
+          "url": "Demo Lecture by Sachin Sir : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accd9cc6edc8c625914de39&topic=Demo%20Lecture%20by%20Sachin%20Sir",
+          "is_pdf": false,
+          "schedule_id": "6accd9cc6edc8c625914de39",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-2",
+          "title": "Demo Lecture by Gulshan sir",
+          "url": "Demo Lecture by Gulshan sir : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdb7ca97685c84dde5c61&topic=Demo%20Lecture%20by%20Gulshan%20sir",
+          "is_pdf": false,
+          "schedule_id": "6accdb7ca97685c84dde5c61",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-3",
+          "title": "Demo Lecture by Nisha Ma'am",
+          "url": "Demo Lecture by Nisha Ma'am : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdbca6bf52f5aa9d6708a&topic=Demo%20Lecture%20by%20Nisha%20Ma'am",
+          "is_pdf": false,
+          "schedule_id": "6accdbca6bf52f5aa9d6708a",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-4",
+          "title": "Demo Lecture by Mokim sir",
+          "url": "Demo Lecture by Mokim sir : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdc1058dcdd998240bde0&topic=Demo%20Lecture%20by%20Mokim%20sir",
+          "is_pdf": false,
+          "schedule_id": "6accdc1058dcdd998240bde0",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-5",
+          "title": "Demo Lecture By Supanjita Ma'am",
+          "url": "Demo Lecture By Supanjita Ma'am : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdc45fc5c453518388ecd&topic=Demo%20Lecture%20By%20Supanjita%20Ma'am",
+          "is_pdf": false,
+          "schedule_id": "6accdc45fc5c453518388ecd",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-6",
+          "title": "Demo Lecture By Aman Sir || Sanskrit",
+          "url": "Demo Lecture By Aman Sir || Sanskrit : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdd14a8fdd925683abc39&topic=Demo%20Lecture%20By%20Aman%20Sir%20%7C%7C%20Sanskrit",
+          "is_pdf": false,
+          "schedule_id": "6accdd14a8fdd925683abc39",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-7",
+          "title": "Demo Lecture By Aman Sir || Hindi",
+          "url": "Demo Lecture By Aman Sir || Hindi : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accdd63a8fdd925683abdcf&topic=Demo%20Lecture%20By%20Aman%20Sir%20%7C%7C%20Hindi",
+          "is_pdf": false,
+          "schedule_id": "6accdd63a8fdd925683abdcf",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-8",
+          "title": "Demo Lecture by Kashif Sir || Urdu",
+          "url": "Demo Lecture by Kashif Sir || Urdu : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6accddcfc8b6d7df3b739523&topic=Demo%20Lecture%20by%20Kashif%20Sir%20%7C%7C%20Urdu",
+          "is_pdf": false,
+          "schedule_id": "6accddcfc8b6d7df3b739523",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-9",
+          "title": "Guidelines of Batch",
+          "url": "Guidelines of Batch : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0ae9a09ecc4017008ac40&topic=Guidelines%20of%20Batch",
+          "is_pdf": false,
+          "schedule_id": "6ac0ae9a09ecc4017008ac40",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-10",
+          "title": "How to find lectures?",
+          "url": "How to find lectures? : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0aebb337afe71569e5292&topic=How%20to%20find%20lectures%3F",
+          "is_pdf": false,
+          "schedule_id": "6ac0aebb337afe71569e5292",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-11",
+          "title": "How to Ask relevant Doubts during Live and Recorded lectures?",
+          "url": "How to Ask relevant Doubts during Live and Recorded lectures? : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0af16febfae8c453e32e5&topic=How%20to%20Ask%20relevant%20Doubts%20during%20Live%20and%20Recorded%20lectures%3F",
+          "is_pdf": false,
+          "schedule_id": "6ac0af16febfae8c453e32e5",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-12",
+          "title": "How to give Test?",
+          "url": "How to give Test? : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0af4a58599c9388589718&topic=How%20to%20give%20Test%3F",
+          "is_pdf": false,
+          "schedule_id": "6ac0af4a58599c9388589718",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-13",
+          "title": "Important Update : Dark Mode",
+          "url": "Important Update : Dark Mode : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0b0069263e108cacb9d46&topic=Important%20Update%20%3A%20Dark%20Mode",
+          "is_pdf": false,
+          "schedule_id": "6ac0b0069263e108cacb9d46",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        },
+        {
+          "id": "pw-6abdf9fd-14",
+          "title": "How to find DHA and DHA solution?",
+          "url": "How to find DHA and DHA solution? : https://courseswala/play?batchId=6abdf9fdd1d2877d797254e2&subjectId=6ac0a0cb552272446606b507&scheduleId=6ac0b0273d471eb99fe81038&topic=How%20to%20find%20DHA%20and%20DHA%20solution%3F",
+          "is_pdf": false,
+          "schedule_id": "6ac0b0273d471eb99fe81038",
+          "subject_id": "6ac0a0cb552272446606b507",
+          "batch_id": "6abdf9fdd1d2877d797254e2"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "subjectName": "Notices",
+      "sectionName": "Lecture Planner || Only PDF",
+      "lectures": [],
+      "notes": [
+        {
+          "id": "note-6abdf9fd-1",
+          "title": "Lecture planner - Jeet Bihar Board class 10th crash Course (English  Medium) (PDF)",
+          "url": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/f3f00f1f-1b0a-41e5-8a20-1eeb3153353c.pdf",
+          "is_pdf": true,
+          "is_dpp": false
+        }
+      ]
+    },
+    {
+      "subjectName": "English",
+      "sectionName": "Handwritten Notes || Only PDF",
+      "lectures": [],
+      "notes": [
+        {
+          "id": "note-6abdf9fd-2",
+          "title": "Basic Grammar  Handwritten Notes (PDF)",
+          "url": "https://static.pw.live/5eb393ee95fab7468a79d189/ADMIN/39ce2465-6b40-45d8-9b45-d51103d9d4b0.pdf",
+          "is_pdf": true,
+          "is_dpp": false
+        }
+      ]
+    }
+  ]
+}
